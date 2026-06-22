@@ -8,7 +8,6 @@
  *   - step 3 validation (URL required)
  *   - step 4 configure call + success state
  */
-import React from 'react';
 import {
   render,
   screen,

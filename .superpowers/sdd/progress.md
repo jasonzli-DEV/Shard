@@ -33,3 +33,6 @@ Phase 7b complete. Commits cd78b03..e824078. 53 vitest, build OK.
 Phase 7b FINAL (all fixes): complete (commit 1cb10e1, 53 vitest, build OK, tsc clean)
 Phase 7b (frontend 7.6-7.8): complete (commits 11c3ae9..1cb10e1, 53 vitest, build OK)
 - pages: Trash,Starred,Search,SharedWithMe,PublicFile(/p/:slug no auth),Dashboard,Settings. components: ShareDialog,PublicLinkDialog. Frontend feature-complete except Setup wizard (Phase 8).
+Phase 8 (setup wizard + branding): complete (commits c777040..5bef282). Backend 294 tests, frontend 84 tests, all green, both tsc clean, build OK.
+- /api/setup (status,test-connection,configure). Setup.tsx 4-step wizard. logo.svg/favicon.svg, README rewritten for Shard.
+FULL STACK GREEN as of this point.
