@@ -271,6 +271,44 @@ describe('Share model', () => {
   });
 });
 
+// ── Config ────────────────────────────────────────────────────────────────────
+
+describe('Config model', () => {
+  let BoundConfig: mongoose.Model<any>;
+
+  beforeAll(async () => {
+    const { ConfigModel } = await import('../Config');
+    try {
+      BoundConfig = conn.model(ConfigModel.modelName);
+    } catch {
+      BoundConfig = conn.model(ConfigModel.modelName, ConfigModel.schema);
+    }
+    await BoundConfig.createIndexes();
+    await BoundConfig.deleteMany({});
+  });
+
+  it('creates a singleton Config document', async () => {
+    const doc = await BoundConfig.create({
+      key: 'singleton',
+      jwtSecret: 'testsecret',
+      googleClientId: 'gid',
+    });
+
+    expect(doc.key).toBe('singleton');
+    expect(doc.jwtSecret).toBe('testsecret');
+    expect(doc.googleClientId).toBe('gid');
+    expect(doc.updatedAt).toBeDefined();
+  });
+
+  it('enforces unique key constraint', async () => {
+    await BoundConfig.deleteMany({});
+    await BoundConfig.create({ key: 'singleton', jwtSecret: 'secret1' });
+    await expect(
+      BoundConfig.create({ key: 'singleton', jwtSecret: 'secret2' })
+    ).rejects.toThrow();
+  });
+});
+
 // ── PublicLink ─────────────────────────────────────────────────────────────────
 
 describe('PublicLink model', () => {
