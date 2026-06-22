@@ -109,10 +109,16 @@ export default function Drive() {
   }, []);
 
   const handleSectionNavigate = useCallback((s: string) => {
-    setSection(s as Section);
     if (s === 'drive') {
+      setSection('drive');
       setBreadcrumbs([{ id: null, name: 'My Drive' }]);
       navigate('/');
+    } else if (s === 'starred') {
+      navigate('/starred');
+    } else if (s === 'search') {
+      navigate('/search');
+    } else if (s === 'trash') {
+      navigate('/trash');
     }
   }, [navigate]);
 

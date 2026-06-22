@@ -9,6 +9,9 @@ import './styles/theme.css';
 const Login = lazy(() => import('./pages/Login'));
 const Drive = lazy(() => import('./pages/Drive'));
 const Setup = lazy(() => import('./pages/Setup'));
+const Trash = lazy(() => import('./pages/Trash'));
+const Starred = lazy(() => import('./pages/Starred'));
+const Search = lazy(() => import('./pages/Search'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,6 +88,30 @@ function AppRouter() {
           element={
             <Suspense fallback={<PageFallback />}>
               <Drive />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/trash"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Trash />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/starred"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Starred />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/search"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Search />
             </Suspense>
           }
         />
