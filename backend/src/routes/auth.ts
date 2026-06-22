@@ -19,6 +19,16 @@ function isSupportedProvider(p: string): p is Provider {
 const COOKIE_NAME = 'shard_token';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
 
+/**
+ * Whether to set the Secure flag on session cookies.
+ * Driven by COOKIE_SECURE env var (default false so plain-HTTP Pi deploys work).
+ * Set COOKIE_SECURE=true when serving over HTTPS/TLS.
+ */
+function isCookieSecure(): boolean {
+  const val = process.env.COOKIE_SECURE;
+  return val === 'true' || val === '1';
+}
+
 // Allow tests to inject connection
 let _overrideConn: mongoose.Connection | null = null;
 
@@ -110,7 +120,7 @@ router.get(
 
         res.cookie(COOKIE_NAME, token, {
           httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
+          secure: isCookieSecure(),
           sameSite: 'lax',
           maxAge: COOKIE_MAX_AGE,
         });
@@ -129,7 +139,7 @@ router.get(
 router.post('/logout', async (req: Request, res: Response) => {
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isCookieSecure(),
     sameSite: 'lax',
   });
   res.json({ message: 'Logged out' });
