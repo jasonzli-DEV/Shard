@@ -13,6 +13,7 @@ import { FileModel } from '../models/File';
 import { getStarter } from '../lib/db';
 import * as fileService from '../services/files';
 import * as storageService from '../storage/storageService';
+import { canAccess } from '../services/shares';
 import { logger } from '../utils/logger';
 
 const router = Router();
@@ -167,7 +168,8 @@ router.get('/files/:id/download', async (req: Request, res: Response) => {
       return;
     }
 
-    if (file.userId.toString() !== userId) {
+    const hasAccess = await canAccess(userId, id, 'view');
+    if (!hasAccess) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
@@ -179,9 +181,12 @@ router.get('/files/:id/download', async (req: Request, res: Response) => {
 
     let encryptionKey: string | undefined;
     if (file.encrypted) {
-      const User = getUserModel();
-      const user = await User.findById(userId);
-      encryptionKey = user?.encryptionKey ?? undefined;
+      // Only the owner has their encryption key
+      if (file.userId.toString() === userId) {
+        const User = getUserModel();
+        const user = await User.findById(userId);
+        encryptionKey = user?.encryptionKey ?? undefined;
+      }
     }
 
     const buffer = await storageService.readFile(id, encryptionKey);
@@ -209,18 +214,35 @@ router.patch('/files/:id', async (req: Request, res: Response) => {
     starred?: boolean;
   };
 
+  // Resolve the file first so we can return 404 before a 403 for missing files
+  const targetFile = await FileModel.findById(id);
+  if (!targetFile) {
+    res.status(404).json({ error: 'File not found' });
+    return;
+  }
+
+  // Require edit permission for rename/move/star
+  const hasEditAccess = await canAccess(userId, id, 'edit');
+  if (!hasEditAccess) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+
+  // Use the file's actual owner userId for the service layer (supports shared-user ops)
+  const fileOwnerId = targetFile.userId.toString();
+
   try {
     let file;
 
     if (body.name !== undefined && body.parentId !== undefined) {
-      file = await fileService.rename(userId, id, body.name);
-      file = await fileService.move(userId, id, body.parentId ?? null);
+      file = await fileService.rename(fileOwnerId, id, body.name);
+      file = await fileService.move(fileOwnerId, id, body.parentId ?? null);
     } else if (body.name !== undefined) {
-      file = await fileService.rename(userId, id, body.name);
+      file = await fileService.rename(fileOwnerId, id, body.name);
     } else if (body.parentId !== undefined) {
-      file = await fileService.move(userId, id, body.parentId ?? null);
+      file = await fileService.move(fileOwnerId, id, body.parentId ?? null);
     } else if (body.starred !== undefined) {
-      file = await fileService.star(userId, id, body.starred);
+      file = await fileService.star(fileOwnerId, id, body.starred);
     } else {
       res.status(400).json({ error: 'Provide name, parentId, or starred to update' });
       return;
@@ -248,8 +270,24 @@ router.delete('/files/:id', async (req: Request, res: Response) => {
   const userId = (req as any).userId as string;
   const { id } = req.params;
 
+  // Check existence first so we return 404 before 403 for missing files
+  const targetFile = await FileModel.findById(id);
+  if (!targetFile) {
+    res.status(404).json({ error: 'File not found' });
+    return;
+  }
+
+  // Require edit permission to delete
+  const hasEditAccess = await canAccess(userId, id, 'edit');
+  if (!hasEditAccess) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+
+  const fileOwnerId = targetFile.userId.toString();
+
   try {
-    await fileService.softDelete(userId, id);
+    await fileService.softDelete(fileOwnerId, id);
     res.json({ message: 'File moved to trash' });
   } catch (err: any) {
     if (err.code === 'NOT_FOUND') {

@@ -6,6 +6,7 @@ import { configurePassport } from './auth/passport';
 import authRouter, { meHandler } from './routes/auth';
 import apiKeysRouter from './routes/apiKeys';
 import filesRouter from './routes/files';
+import sharesRouter from './routes/shares';
 import v1Router from './routes/v1';
 import storageRouter from './routes/storage';
 import { requireAuth } from './middleware/auth';
@@ -49,6 +50,7 @@ export function createApp(): Application {
   app.get('/api/me', requireAuth, meHandler);
   app.use('/api/keys', apiKeysRouter);
   app.use('/api', filesRouter);
+  app.use('/api', sharesRouter);
   app.use('/api', storageRouter);
   app.use('/api/v1', v1Router);
 
