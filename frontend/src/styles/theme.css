@@ -21,6 +21,13 @@
   --color-accent:       #4A90D9;   /* primary interactive */
   --color-accent-dim:   #2E5F99;   /* pressed / deep accent */
   --color-accent-glow:  rgba(74, 144, 217, 0.18); /* subtle highlight fill */
+  --color-on-accent:    #ffffff;   /* text on accent-colored backgrounds */
+
+  /* Semantic dim fills — badge backgrounds */
+  --color-success-dim:    rgba(76, 175, 125, 0.15);
+  --color-accent-dim-bg:  rgba(74, 144, 217, 0.15);
+  --color-warning-dim:    rgba(224, 166, 82, 0.15);
+  --color-danger-dim-bg:  rgba(224, 82, 82, 0.15);
 
   /* Crystal facet tones — used in logomark + decorative elements */
   --color-facet-dark:   #1E2740;   /* shadowed face */

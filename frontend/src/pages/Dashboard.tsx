@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import Sidebar from '../components/Sidebar';
 import { getStorage } from '../api/storage';
@@ -37,7 +37,7 @@ function CrystalIcon({ size = 24 }: { size?: number }) {
       <polygon points="4,44 22,8 22,30" fill="var(--color-facet-dark)" />
       <polygon points="22,8 44,36 22,44" fill="var(--color-facet-mid)" />
       <polygon points="22,8 44,20 44,36" fill="var(--color-facet-light)" />
-      <line x1="22" y1="8" x2="44" y2="20" stroke="#6AABF0" strokeWidth="0.75" strokeLinecap="round" />
+      <line x1="22" y1="8" x2="44" y2="20" stroke="var(--color-accent)" strokeWidth="0.75" strokeLinecap="round" />
     </svg>
   );
 }
@@ -133,7 +133,7 @@ export default function Dashboard() {
               {data.orgs.length === 0 ? (
                 <div className="dashboard-empty">
                   No storage configured.{' '}
-                  <a href="/settings">Add Atlas org keys in Settings.</a>
+                  <Link to="/settings">Add Atlas org keys in Settings.</Link>
                 </div>
               ) : (
                 <div className="dashboard-org-list">
