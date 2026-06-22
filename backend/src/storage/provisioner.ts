@@ -1,10 +1,13 @@
 import { nanoid } from 'nanoid';
 import { Types } from 'mongoose';
 import { OrgKeyModel, StorageClusterModel, type IStorageCluster } from '../models';
-import { makeAtlasClient } from '../atlas/client';
+import { makeAtlasClient, M0_ELIGIBLE_REGIONS } from '../atlas/client';
 import { openCluster, getActiveCluster, USABLE_BYTES } from './clusterManager';
 
 const ORG_CLUSTER_CAP = 250;
+
+/** Fallback Atlas region when neither OrgKey.region nor ATLAS_DEFAULT_REGION env var is set */
+const FALLBACK_REGION = 'US_EAST_1';
 
 class StorageFullError extends Error {
   code: string;
@@ -43,8 +46,19 @@ export async function provisionNextCluster(userId: string): Promise<IStorageClus
   );
   const projectId = project.id;
 
+  // Determine region: prefer OrgKey.region, then ATLAS_DEFAULT_REGION env var, then US_EAST_1
+  const rawRegion =
+    (orgKey as unknown as { region?: string }).region ??
+    process.env['ATLAS_DEFAULT_REGION'] ??
+    FALLBACK_REGION;
+  if (!(M0_ELIGIBLE_REGIONS as readonly string[]).includes(rawRegion)) {
+    throw new Error(
+      `Invalid Atlas region "${rawRegion}". Must be one of: ${M0_ELIGIBLE_REGIONS.join(', ')}`,
+    );
+  }
+
   // Create cluster
-  await client.createCluster(projectId, clusterName);
+  await client.createCluster(projectId, clusterName, rawRegion);
 
   // Wait for cluster to be IDLE
   const cluster = await client.waitForCluster(projectId, clusterName);

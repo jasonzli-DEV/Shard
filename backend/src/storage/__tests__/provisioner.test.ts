@@ -13,9 +13,13 @@ jest.mock('../../models', () => ({
   },
 }));
 
-jest.mock('../../atlas/client', () => ({
-  makeAtlasClient: jest.fn(),
-}));
+jest.mock('../../atlas/client', () => {
+  const actual = jest.requireActual<typeof import('../../atlas/client')>('../../atlas/client');
+  return {
+    makeAtlasClient: jest.fn(),
+    M0_ELIGIBLE_REGIONS: actual.M0_ELIGIBLE_REGIONS,
+  };
+});
 
 jest.mock('../clusterManager', () => ({
   openCluster: jest.fn(),
@@ -79,6 +83,8 @@ function makeAtlasClientMock() {
     parseCredentialsFromUri: jest.fn(),
     addOrgApiKeyAccessList: jest.fn(),
     extractRequiredAccessListIp: jest.fn(),
+    deleteCluster: jest.fn(async () => ({})),
+    deleteProject: jest.fn(async () => ({})),
   };
 }
 
@@ -195,6 +201,101 @@ describe('provisioner', () => {
       await expect(provisionNextCluster(userId)).rejects.toMatchObject({
         code: 'STORAGE_FULL',
       });
+    });
+
+    it('uses OrgKey region when set, passing it to createCluster', async () => {
+      const orgKey = { ...makeOrgKey({ clusterCount: 0 }), region: 'EU_WEST_1' };
+      (mockOrgKeyModel.find as jest.Mock).mockResolvedValue([orgKey]);
+
+      const atlasClient = makeAtlasClientMock();
+      mockMakeAtlasClient.mockReturnValue(atlasClient as ReturnType<typeof makeAtlasClient>);
+
+      (mockStorageClusterModel.findOne as jest.Mock).mockResolvedValue(null);
+      (mockStorageClusterModel.updateMany as jest.Mock).mockResolvedValue({});
+      (mockStorageClusterModel.create as jest.Mock).mockResolvedValue({ clusterId: 'shard-user-1', status: 'active' });
+      (mockOrgKeyModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({});
+
+      await provisionNextCluster(userId);
+
+      expect(atlasClient.createCluster).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        'EU_WEST_1',
+      );
+    });
+
+    it('uses ATLAS_DEFAULT_REGION env var when OrgKey has no region', async () => {
+      const savedEnv = process.env['ATLAS_DEFAULT_REGION'];
+      process.env['ATLAS_DEFAULT_REGION'] = 'AP_SOUTH_1';
+
+      const orgKey = makeOrgKey({ clusterCount: 0 });
+      (mockOrgKeyModel.find as jest.Mock).mockResolvedValue([orgKey]);
+
+      const atlasClient = makeAtlasClientMock();
+      mockMakeAtlasClient.mockReturnValue(atlasClient as ReturnType<typeof makeAtlasClient>);
+
+      (mockStorageClusterModel.findOne as jest.Mock).mockResolvedValue(null);
+      (mockStorageClusterModel.updateMany as jest.Mock).mockResolvedValue({});
+      (mockStorageClusterModel.create as jest.Mock).mockResolvedValue({ clusterId: 'shard-user-1', status: 'active' });
+      (mockOrgKeyModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({});
+
+      try {
+        await provisionNextCluster(userId);
+      } finally {
+        if (savedEnv === undefined) {
+          delete process.env['ATLAS_DEFAULT_REGION'];
+        } else {
+          process.env['ATLAS_DEFAULT_REGION'] = savedEnv;
+        }
+      }
+
+      expect(atlasClient.createCluster).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        'AP_SOUTH_1',
+      );
+    });
+
+    it('falls back to US_EAST_1 when no OrgKey region and no env var', async () => {
+      const savedEnv = process.env['ATLAS_DEFAULT_REGION'];
+      delete process.env['ATLAS_DEFAULT_REGION'];
+
+      const orgKey = makeOrgKey({ clusterCount: 0 });
+      (mockOrgKeyModel.find as jest.Mock).mockResolvedValue([orgKey]);
+
+      const atlasClient = makeAtlasClientMock();
+      mockMakeAtlasClient.mockReturnValue(atlasClient as ReturnType<typeof makeAtlasClient>);
+
+      (mockStorageClusterModel.findOne as jest.Mock).mockResolvedValue(null);
+      (mockStorageClusterModel.updateMany as jest.Mock).mockResolvedValue({});
+      (mockStorageClusterModel.create as jest.Mock).mockResolvedValue({ clusterId: 'shard-user-1', status: 'active' });
+      (mockOrgKeyModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({});
+
+      try {
+        await provisionNextCluster(userId);
+      } finally {
+        if (savedEnv === undefined) {
+          delete process.env['ATLAS_DEFAULT_REGION'];
+        } else {
+          process.env['ATLAS_DEFAULT_REGION'] = savedEnv;
+        }
+      }
+
+      expect(atlasClient.createCluster).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        'US_EAST_1',
+      );
+    });
+
+    it('throws on invalid region in OrgKey', async () => {
+      const orgKey = { ...makeOrgKey({ clusterCount: 0 }), region: 'INVALID_REGION_XYZ' };
+      (mockOrgKeyModel.find as jest.Mock).mockResolvedValue([orgKey]);
+
+      const atlasClient = makeAtlasClientMock();
+      mockMakeAtlasClient.mockReturnValue(atlasClient as ReturnType<typeof makeAtlasClient>);
+
+      await expect(provisionNextCluster(userId)).rejects.toThrow(/invalid.*region/i);
     });
   });
 

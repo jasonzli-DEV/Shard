@@ -8,6 +8,8 @@ export interface IOrgKey extends Document {
   privateKey: string;
   orgId: string;
   clusterCount: number;
+  /** Optional per-org Atlas region override (e.g. "EU_WEST_1"). Falls back to ATLAS_DEFAULT_REGION env var. */
+  region?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +23,7 @@ const OrgKeySchema = new Schema<IOrgKey>(
     privateKey: { type: String, required: true },
     orgId: { type: String, required: true },
     clusterCount: { type: Number, default: 0 },
+    region: { type: String },
   },
   { timestamps: true }
 );

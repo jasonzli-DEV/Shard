@@ -269,13 +269,9 @@ describe('makeAtlasClient', () => {
   });
 
   describe('createCluster', () => {
-    it('posts M0/TENANT/AWS/US_EAST_1 config to Atlas', async () => {
-      let capturedBody: unknown = null;
-      const projectId = 'proj-123';
-      const clusterName = 'shard-user-1';
+    function makeDigestMock(captureBody: { value: unknown }) {
       const wwwAuth = `Digest realm="r", nonce="n", qop="auth"`;
-
-      mockFetch.mockImplementation(async (_url: string, init?: RequestInit) => {
+      return jest.fn(async (_url: string, init?: RequestInit) => {
         const headers = (init?.headers ?? {}) as Record<string, string>;
         if (!headers['Authorization']) {
           return {
@@ -286,20 +282,26 @@ describe('makeAtlasClient', () => {
             text: async () => '',
           };
         }
-        if (init?.body) capturedBody = JSON.parse(init.body as string);
+        if (init?.body) captureBody.value = JSON.parse(init.body as string);
         return {
           status: 201,
           ok: true,
           headers: { get: () => null },
-          json: async () => ({ name: clusterName, stateName: 'CREATING' }),
-          text: async () => `{"name":"${clusterName}","stateName":"CREATING"}`,
+          json: async () => ({ name: 'shard-user-1', stateName: 'CREATING' }),
+          text: async () => '{"name":"shard-user-1","stateName":"CREATING"}',
         };
       });
+    }
+
+    it('posts M0/TENANT/AWS/US_EAST_1 config to Atlas when no region given', async () => {
+      const captured = { value: null as unknown };
+      mockFetch = makeDigestMock(captured);
+      global.fetch = mockFetch;
 
       const client = makeAtlasClient({ publicKey: PUBLIC_KEY, privateKey: PRIVATE_KEY });
-      await client.createCluster(projectId, clusterName);
+      await client.createCluster('proj-123', 'shard-user-1');
 
-      const body = capturedBody as Record<string, unknown>;
+      const body = captured.value as Record<string, unknown>;
       expect(body).toBeTruthy();
       expect(body['clusterType']).toBe('REPLICASET');
 
@@ -312,6 +314,109 @@ describe('makeAtlasClient', () => {
 
       const electableSpecs = regionCfg?.['electableSpecs'] as Record<string, unknown>;
       expect(electableSpecs?.['instanceSize']).toBe('M0');
+    });
+
+    it('uses specified region when provided', async () => {
+      const captured = { value: null as unknown };
+      mockFetch = makeDigestMock(captured);
+      global.fetch = mockFetch;
+
+      const client = makeAtlasClient({ publicKey: PUBLIC_KEY, privateKey: PRIVATE_KEY });
+      await client.createCluster('proj-123', 'shard-user-1', 'EU_WEST_1');
+
+      const body = captured.value as Record<string, unknown>;
+      const specs = (body?.['replicationSpecs'] as Array<unknown>)?.[0] as Record<string, unknown>;
+      const regionCfg = (specs?.['regionConfigs'] as Array<unknown>)?.[0] as Record<string, unknown>;
+
+      expect(regionCfg?.['regionName']).toBe('EU_WEST_1');
+    });
+
+    it('uses AP_SOUTHEAST_1 when that region is specified', async () => {
+      const captured = { value: null as unknown };
+      mockFetch = makeDigestMock(captured);
+      global.fetch = mockFetch;
+
+      const client = makeAtlasClient({ publicKey: PUBLIC_KEY, privateKey: PRIVATE_KEY });
+      await client.createCluster('proj-123', 'shard-user-1', 'AP_SOUTHEAST_1');
+
+      const body = captured.value as Record<string, unknown>;
+      const specs = (body?.['replicationSpecs'] as Array<unknown>)?.[0] as Record<string, unknown>;
+      const regionCfg = (specs?.['regionConfigs'] as Array<unknown>)?.[0] as Record<string, unknown>;
+
+      expect(regionCfg?.['regionName']).toBe('AP_SOUTHEAST_1');
+    });
+  });
+
+  describe('deleteCluster', () => {
+    it('sends DELETE to /groups/{projectId}/clusters/{name}', async () => {
+      let capturedUrl = '';
+      let capturedMethod = '';
+      const wwwAuth = `Digest realm="r", nonce="n", qop="auth"`;
+
+      mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        if (!headers['Authorization']) {
+          return {
+            status: 401,
+            ok: false,
+            headers: { get: (h: string) => (h === 'www-authenticate' ? wwwAuth : null) },
+            json: async () => ({}),
+            text: async () => '',
+          };
+        }
+        capturedUrl = url;
+        capturedMethod = init?.method ?? 'GET';
+        return {
+          status: 202,
+          ok: true,
+          headers: { get: () => null },
+          json: async () => ({}),
+          text: async () => '{}',
+        };
+      });
+
+      const client = makeAtlasClient({ publicKey: PUBLIC_KEY, privateKey: PRIVATE_KEY });
+      await client.deleteCluster('proj-xyz', 'shard-cluster-1');
+
+      expect(capturedMethod).toBe('DELETE');
+      expect(capturedUrl).toContain('/groups/proj-xyz/clusters/shard-cluster-1');
+    });
+  });
+
+  describe('deleteProject', () => {
+    it('sends DELETE to /groups/{projectId}', async () => {
+      let capturedUrl = '';
+      let capturedMethod = '';
+      const wwwAuth = `Digest realm="r", nonce="n", qop="auth"`;
+
+      mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        if (!headers['Authorization']) {
+          return {
+            status: 401,
+            ok: false,
+            headers: { get: (h: string) => (h === 'www-authenticate' ? wwwAuth : null) },
+            json: async () => ({}),
+            text: async () => '',
+          };
+        }
+        capturedUrl = url;
+        capturedMethod = init?.method ?? 'GET';
+        return {
+          status: 202,
+          ok: true,
+          headers: { get: () => null },
+          json: async () => ({}),
+          text: async () => '{}',
+        };
+      });
+
+      const client = makeAtlasClient({ publicKey: PUBLIC_KEY, privateKey: PRIVATE_KEY });
+      await client.deleteProject('proj-xyz');
+
+      expect(capturedMethod).toBe('DELETE');
+      expect(capturedUrl).toContain('/groups/proj-xyz');
+      expect(capturedUrl).not.toContain('/clusters/');
     });
   });
 

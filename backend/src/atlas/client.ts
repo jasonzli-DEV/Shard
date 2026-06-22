@@ -13,13 +13,26 @@ export interface AtlasError {
   body: string;
 }
 
+/** M0-eligible AWS regions for Atlas free tier clusters */
+export const M0_ELIGIBLE_REGIONS = [
+  'US_EAST_1',
+  'US_WEST_2',
+  'EU_WEST_1',
+  'EU_CENTRAL_1',
+  'AP_SOUTHEAST_1',
+  'AP_SOUTH_1',
+  'SA_EAST_1',
+] as const;
+
+export type M0Region = (typeof M0_ELIGIBLE_REGIONS)[number];
+
 export interface AtlasClient {
   apiGet<T = unknown>(path: string): Promise<T>;
   apiPost<T = unknown>(path: string, body: unknown): Promise<T>;
   apiPatch<T = unknown>(path: string, body: unknown): Promise<T>;
   discoverOrgId(): Promise<string>;
   createProject(orgId: string, name: string): Promise<{ id: string; name: string }>;
-  createCluster(projectId: string, clusterName: string): Promise<unknown>;
+  createCluster(projectId: string, clusterName: string, region?: string): Promise<unknown>;
   waitForCluster(projectId: string, clusterName: string, pollMs?: number): Promise<{ connectionStrings?: { standardSrv?: string }; [key: string]: unknown }>;
   createDatabaseUser(projectId: string, username: string, password: string): Promise<unknown>;
   addIpAllowlist(projectId: string): Promise<unknown>;
@@ -28,6 +41,8 @@ export interface AtlasClient {
   addOrgApiKeyAccessList(orgId: string, ipAddress: string): Promise<unknown>;
   withOrgApiAccessListRetry<T>(orgId: string, operation: () => Promise<T>): Promise<T>;
   extractRequiredAccessListIp(err: unknown): string;
+  deleteCluster(projectId: string, clusterName: string): Promise<unknown>;
+  deleteProject(projectId: string): Promise<unknown>;
 }
 
 function parseDigestChallenge(header: string): {
@@ -130,7 +145,11 @@ export function makeAtlasClient({ publicKey, privateKey }: AtlasClientConfig): A
     return apiPost<{ id: string; name: string }>('/groups', { name, orgId });
   }
 
-  async function createCluster(projectId: string, clusterName: string): Promise<unknown> {
+  async function createCluster(
+    projectId: string,
+    clusterName: string,
+    region = 'US_EAST_1',
+  ): Promise<unknown> {
     return apiPost(`/groups/${projectId}/clusters`, {
       name: clusterName,
       clusterType: 'REPLICASET',
@@ -140,7 +159,7 @@ export function makeAtlasClient({ publicKey, privateKey }: AtlasClientConfig): A
             {
               providerName: 'TENANT',
               backingProviderName: 'AWS',
-              regionName: 'US_EAST_1',
+              regionName: region,
               priority: 7,
               electableSpecs: { instanceSize: 'M0', nodeCount: 3 },
             },
@@ -148,6 +167,22 @@ export function makeAtlasClient({ publicKey, privateKey }: AtlasClientConfig): A
         },
       ],
     });
+  }
+
+  async function deleteCluster(projectId: string, clusterName: string): Promise<unknown> {
+    const res = await digestFetch(
+      `${ATLAS_BASE}/groups/${projectId}/clusters/${clusterName}`,
+      'DELETE',
+    );
+    if (!res.ok) await throwAtlasError('DELETE', `/groups/${projectId}/clusters/${clusterName}`, res);
+    // 202 Accepted — no body
+    return {};
+  }
+
+  async function deleteProject(projectId: string): Promise<unknown> {
+    const res = await digestFetch(`${ATLAS_BASE}/groups/${projectId}`, 'DELETE');
+    if (!res.ok) await throwAtlasError('DELETE', `/groups/${projectId}`, res);
+    return {};
   }
 
   async function waitForCluster(
@@ -257,5 +292,7 @@ export function makeAtlasClient({ publicKey, privateKey }: AtlasClientConfig): A
     addOrgApiKeyAccessList,
     withOrgApiAccessListRetry,
     extractRequiredAccessListIp,
+    deleteCluster,
+    deleteProject,
   };
 }
