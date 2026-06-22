@@ -33,7 +33,7 @@ export interface AtlasClient {
   discoverOrgId(): Promise<string>;
   createProject(orgId: string, name: string): Promise<{ id: string; name: string }>;
   createCluster(projectId: string, clusterName: string, region?: string): Promise<unknown>;
-  waitForCluster(projectId: string, clusterName: string, pollMs?: number): Promise<{ connectionStrings?: { standardSrv?: string }; [key: string]: unknown }>;
+  waitForCluster(projectId: string, clusterName: string, pollMs?: number, timeoutMs?: number): Promise<{ connectionStrings?: { standardSrv?: string }; [key: string]: unknown }>;
   createDatabaseUser(projectId: string, username: string, password: string): Promise<unknown>;
   addIpAllowlist(projectId: string): Promise<unknown>;
   buildConnectionUri(srvHost: string, username: string, password: string, dbName?: string): string;
@@ -189,8 +189,24 @@ export function makeAtlasClient({ publicKey, privateKey }: AtlasClientConfig): A
     projectId: string,
     clusterName: string,
     pollMs = 15_000,
+    timeoutMs?: number,
   ): Promise<{ connectionStrings?: { standardSrv?: string }; [key: string]: unknown }> {
+    // Default timeout: from ATLAS_PROVISION_TIMEOUT_MS env var, or 15 minutes.
+    const deadline =
+      Date.now() +
+      (timeoutMs ??
+        parseInt(process.env['ATLAS_PROVISION_TIMEOUT_MS'] ?? '900000', 10));
+
     for (;;) {
+      if (Date.now() >= deadline) {
+        throw Object.assign(
+          new Error(
+            `Timed out waiting for Atlas cluster "${clusterName}" in project "${projectId}" to reach IDLE state`,
+          ),
+          { code: 'CLUSTER_PROVISION_TIMEOUT' },
+        );
+      }
+
       const cluster = await apiGet<{ stateName: string; connectionStrings?: { standardSrv?: string } }>(
         `/groups/${projectId}/clusters/${clusterName}`,
       );

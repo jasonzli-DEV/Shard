@@ -420,6 +420,68 @@ describe('makeAtlasClient', () => {
     });
   });
 
+  describe('waitForCluster', () => {
+    it('returns the cluster when it reaches IDLE state', async () => {
+      const wwwAuth = `Digest realm="r", nonce="n", qop="auth"`;
+
+      mockFetch.mockImplementation(async (_url: string, init?: RequestInit) => {
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        if (!headers['Authorization']) {
+          return {
+            status: 401,
+            ok: false,
+            headers: { get: (h: string) => (h === 'www-authenticate' ? wwwAuth : null) },
+            json: async () => ({}),
+            text: async () => '',
+          };
+        }
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: () => null },
+          json: async () => ({ stateName: 'IDLE', connectionStrings: { standardSrv: 'mongodb+srv://x' } }),
+          text: async () => '{}',
+        };
+      });
+
+      const client = makeAtlasClient({ publicKey: PUBLIC_KEY, privateKey: PRIVATE_KEY });
+      const result = await client.waitForCluster('proj-1', 'cluster-1', 10, 5000);
+      expect((result as any).stateName).toBe('IDLE');
+    });
+
+    it('throws with CLUSTER_PROVISION_TIMEOUT code when deadline is exceeded', async () => {
+      const wwwAuth = `Digest realm="r", nonce="n", qop="auth"`;
+
+      // Always returns CREATING — will never reach IDLE
+      mockFetch.mockImplementation(async (_url: string, init?: RequestInit) => {
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        if (!headers['Authorization']) {
+          return {
+            status: 401,
+            ok: false,
+            headers: { get: (h: string) => (h === 'www-authenticate' ? wwwAuth : null) },
+            json: async () => ({}),
+            text: async () => '',
+          };
+        }
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: () => null },
+          json: async () => ({ stateName: 'CREATING' }),
+          text: async () => '{}',
+        };
+      });
+
+      const client = makeAtlasClient({ publicKey: PUBLIC_KEY, privateKey: PRIVATE_KEY });
+
+      // Use a very short poll interval (1 ms) and tiny timeout (50 ms)
+      await expect(
+        client.waitForCluster('proj-1', 'cluster-1', 1, 50),
+      ).rejects.toMatchObject({ code: 'CLUSTER_PROVISION_TIMEOUT' });
+    });
+  });
+
   describe('withOrgApiAccessListRetry', () => {
     it('retries operation after adding IP to access list on ORG_REQUIRES_ACCESS_LIST error', async () => {
       const orgId = 'org-abc';
