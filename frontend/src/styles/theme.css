@@ -27,7 +27,6 @@
   --color-success-dim:    rgba(76, 175, 125, 0.15);
   --color-accent-dim-bg:  rgba(74, 144, 217, 0.15);
   --color-warning-dim:    rgba(224, 166, 82, 0.15);
-  --color-danger-dim-bg:  rgba(224, 82, 82, 0.15);
 
   /* Crystal facet tones — used in logomark + decorative elements */
   --color-facet-dark:   #1E2740;   /* shadowed face */

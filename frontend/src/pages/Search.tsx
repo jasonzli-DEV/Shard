@@ -24,6 +24,8 @@ export default function Search() {
       if (section === 'drive') navigate('/');
       else if (section === 'trash') navigate('/trash');
       else if (section === 'starred') navigate('/starred');
+      else if (section === 'dashboard') navigate('/dashboard');
+      else if (section === 'settings') navigate('/settings');
     },
     [navigate],
   );

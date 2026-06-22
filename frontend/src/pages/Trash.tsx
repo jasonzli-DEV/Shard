@@ -22,6 +22,8 @@ export default function Trash() {
       if (section === 'drive') navigate('/');
       else if (section === 'starred') navigate('/starred');
       else if (section === 'search') navigate('/search');
+      else if (section === 'dashboard') navigate('/dashboard');
+      else if (section === 'settings') navigate('/settings');
     },
     [navigate],
   );

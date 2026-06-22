@@ -22,6 +22,8 @@ export default function SharedWithMe() {
       else if (section === 'search') navigate('/search');
       else if (section === 'trash') navigate('/trash');
       else if (section === 'shared') navigate('/shared');
+      else if (section === 'dashboard') navigate('/dashboard');
+      else if (section === 'settings') navigate('/settings');
     },
     [navigate],
   );

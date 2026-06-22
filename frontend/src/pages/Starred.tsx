@@ -27,6 +27,8 @@ export default function Starred() {
       if (section === 'drive') navigate('/');
       else if (section === 'trash') navigate('/trash');
       else if (section === 'search') navigate('/search');
+      else if (section === 'dashboard') navigate('/dashboard');
+      else if (section === 'settings') navigate('/settings');
     },
     [navigate],
   );

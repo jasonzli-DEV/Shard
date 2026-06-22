@@ -19,7 +19,7 @@ import type { FileItem } from '../api/files';
 import './Drive.css';
 
 type ViewMode = 'grid' | 'list';
-type Section = 'drive' | 'starred' | 'search' | 'trash';
+type Section = 'drive' | 'starred' | 'search' | 'trash' | 'shared' | 'dashboard' | 'settings';
 
 export default function Drive() {
   const { folderId } = useParams<{ folderId?: string }>();
@@ -129,6 +129,10 @@ export default function Drive() {
       navigate('/trash');
     } else if (s === 'shared') {
       navigate('/shared');
+    } else if (s === 'dashboard') {
+      navigate('/dashboard');
+    } else if (s === 'settings') {
+      navigate('/settings');
     }
   }, [navigate]);
 

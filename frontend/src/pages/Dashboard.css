@@ -158,9 +158,9 @@
 }
 
 .badge-error {
-  background: var(--color-danger-dim-bg);
+  background: var(--color-danger-dim);
   color: var(--color-danger);
-  border: 1px solid var(--color-danger-dim-bg);
+  border: 1px solid var(--color-danger-dim);
 }
 
 .badge-decommissioned {
