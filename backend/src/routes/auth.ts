@@ -54,9 +54,11 @@ export async function meHandler(req: Request, res: Response): Promise<void> {
     }
 
     res.json({
+      _id: user._id.toString(),
       id: user._id.toString(),
       provider: user.provider,
       email: user.email,
+      name: user.displayName,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl ?? null,
       role: user.role,

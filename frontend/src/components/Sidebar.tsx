@@ -106,7 +106,7 @@ interface SidebarItemProps {
   onClick: () => void;
 }
 
-function SidebarItem({ icon, label, active, onClick }: SidebarItemProps) {
+function SidebarItem({ icon, label, id, active, onClick }: SidebarItemProps) {
   return (
     <li>
       <button
@@ -114,6 +114,7 @@ function SidebarItem({ icon, label, active, onClick }: SidebarItemProps) {
         onClick={onClick}
         aria-current={active ? 'page' : undefined}
         type="button"
+        data-testid={`nav-${id}`}
       >
         <span className="sidebar-nav-icon">{icon}</span>
         <span className="sidebar-nav-label">{label}</span>

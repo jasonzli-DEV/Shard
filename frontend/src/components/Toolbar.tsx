@@ -54,6 +54,7 @@ export default function Toolbar({
           aria-hidden="true"
           tabIndex={-1}
           onChange={handleFileInput}
+          data-testid="file-upload-input"
         />
       </div>
 

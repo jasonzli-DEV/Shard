@@ -17,8 +17,11 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { upsertUserFromProfile } from '../auth/passport';
 import { createSession } from '../auth/sessions';
+import { StorageClusterModel } from '../models';
+import { openCluster } from '../storage/clusterManager';
 import { logger } from '../utils/logger';
 
 const router = Router();
@@ -55,6 +58,43 @@ router.post('/login', async (req: Request, res: Response) => {
     });
 
     const token = await createSession(user._id.toString());
+
+    // ── E2E storage bootstrap ─────────────────────────────────────────────────
+    // Create a fake StorageCluster pointing to the local in-memory MongoDB so
+    // that storeFile() / ensureCapacity() can actually write files during E2E.
+    const starterUri = process.env['STARTER_MONGODB_URI']!;
+    const e2eClusterId = `e2e-cluster-${user._id.toString()}`;
+
+    // Upsert a "fake" StorageCluster for this user pointing to local mongo
+    await StorageClusterModel.findOneAndUpdate(
+      { userId: new Types.ObjectId(user._id.toString()), clusterId: e2eClusterId },
+      {
+        $setOnInsert: {
+          userId: new Types.ObjectId(user._id.toString()),
+          orgKeyId: new Types.ObjectId('000000000000000000000000'), // placeholder
+          clusterId: e2eClusterId,
+          projectId: 'e2e-project',
+          clusterName: e2eClusterId,
+          connectionUri: starterUri,
+          status: 'active' as const,
+          storageUsedBytes: 0,
+          storageCapacityBytes: 512 * 1024 * 1024,
+        },
+      },
+      { upsert: true, new: true },
+    );
+
+    // Open the cluster connection in the cluster manager so getBucket() works
+    try {
+      await openCluster({
+        clusterId: e2eClusterId,
+        connectionUri: starterUri,
+        userId: user._id.toString(),
+        status: 'active',
+      });
+    } catch (e) {
+      logger.warn('E2E cluster open warning (non-fatal)', { error: (e as Error).message });
+    }
 
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,

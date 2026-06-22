@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import mongoose from 'mongoose';
 import { createApp } from './app';
 import { connectStarter } from './lib/db';
 import { logger } from './utils/logger';
@@ -13,7 +14,12 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Connect isolated named connection (used by auth/session/storage routes)
   await connectStarter(STARTER_URI);
+
+  // Also connect the default mongoose connection so that models using
+  // mongoose.model() (e.g. FileModel) can reach the same database.
+  await mongoose.connect(STARTER_URI);
 
   const app = createApp();
 
