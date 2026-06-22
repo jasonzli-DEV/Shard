@@ -25,7 +25,8 @@ services:
       # The shard user owns /app (set in Dockerfile), so this mount is writable.
       - ./config:/app/config
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:4000/api/health']
+      # wget is built into node:20-alpine (busybox); curl is not installed.
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:4000/api/health']
       interval: 30s
       timeout: 10s
       retries: 3
