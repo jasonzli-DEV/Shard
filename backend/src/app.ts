@@ -12,6 +12,7 @@ import v1Router from './routes/v1';
 import storageRouter from './routes/storage';
 import setupRouter from './routes/setup';
 import { requireAuth } from './middleware/auth';
+import { e2eAuthRouter } from './routes/e2eAuth';
 
 export function createApp(): Application {
   const app = express();
@@ -50,6 +51,11 @@ export function createApp(): Application {
 
   // Setup wizard — must be before auth routes (setup doesn't require auth)
   app.use('/api/setup', setupRouter);
+
+  // E2E-only test auth — STRICTLY guarded behind SHARD_E2E=1; never active in production
+  if (process.env.SHARD_E2E === '1') {
+    app.use('/api/e2e', e2eAuthRouter);
+  }
 
   app.use('/api/auth', authRouter);
   app.get('/api/me', requireAuth, meHandler);
