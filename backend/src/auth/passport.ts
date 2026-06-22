@@ -74,9 +74,19 @@ export async function upsertUserFromProfile(profile: OAuthProfile): Promise<IUse
 
 /**
  * Configure passport strategies.
- * Call this once during app startup after the DB connection is established.
+ * Safe to call multiple times — existing strategies are unregistered first so
+ * the setup wizard can re-invoke this after writing new OAuth credentials to
+ * process.env without requiring a server restart.
  */
 export function configurePassport(): void {
+  // Unregister any previously-registered strategies so we don't accumulate
+  // stale strategy instances when called again after the setup wizard runs.
+  // passport exposes _strategies internally; we clear the OAuth ones by name.
+  (passport as unknown as { _strategies: Record<string, unknown> })._strategies['google'] &&
+    passport.unuse('google');
+  (passport as unknown as { _strategies: Record<string, unknown> })._strategies['github'] &&
+    passport.unuse('github');
+
   const PUBLIC_URL = process.env.PUBLIC_URL ?? 'http://localhost:4000';
 
   // Google
