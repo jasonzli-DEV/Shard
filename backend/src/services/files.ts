@@ -7,6 +7,8 @@
  */
 import { Types } from 'mongoose';
 import { FileModel, type IFile } from '../models/File';
+import { ShareModel } from '../models/Share';
+import { PublicLinkModel } from '../models/PublicLink';
 import { deleteFileBytes } from '../storage/storageService';
 import { buildPath } from '../utils/paths';
 
@@ -338,12 +340,19 @@ export async function purge(userId: string, fileId: string): Promise<void> {
       if (desc.type === 'file') {
         await deleteFileBytes(desc._id.toString()).catch(() => null);
       }
+      // Cascade-delete Share and PublicLink records for each descendant file (M2)
+      await ShareModel.deleteMany({ fileId: desc._id }).catch(() => null);
+      await PublicLinkModel.deleteMany({ fileId: desc._id }).catch(() => null);
       await FileModel.deleteOne({ _id: desc._id });
     }
   } else {
     // Delete bytes from GridFS
     await deleteFileBytes(fileId).catch(() => null);
   }
+
+  // Cascade-delete Share and PublicLink records for this file/folder (M2)
+  await ShareModel.deleteMany({ fileId: file._id }).catch(() => null);
+  await PublicLinkModel.deleteMany({ fileId: file._id }).catch(() => null);
 
   await FileModel.deleteOne({ _id: file._id });
 }

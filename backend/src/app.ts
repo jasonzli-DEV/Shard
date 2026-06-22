@@ -69,8 +69,12 @@ export function createApp(): Application {
   app.use('/api/v1', v1Router);
 
   // ── Error handler ─────────────────────────────────────────────────────────
+  // Return a generic message in production to avoid leaking driver internals.
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-    res.status(500).json({ error: err.message });
+    const { logger: appLogger } = require('./utils/logger') as typeof import('./utils/logger');
+    appLogger.error('Unhandled error', { error: err.message, stack: err.stack });
+    const isDev = process.env.NODE_ENV !== 'production';
+    res.status(500).json({ error: isDev ? err.message : 'Internal server error' });
   });
 
   return app;
