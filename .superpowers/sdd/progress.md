@@ -45,3 +45,7 @@ Phase 9 (integration + E2E + hardening): complete (commits 9a75004..e449998). Ba
 - 3 bugs fixed: /api/me name field; index.ts now also mongoose.connect(default) for mongoose.model() models; e2e cluster seed.
 - WART for final review: models split default vs named connection (both -> STARTER_URI). functional.
 Final review: 3C/5I/6M. FIXED all C+I + 2 Minor (commits 87d34f1..3b5ec71). Backend 316, Frontend 84, E2E 8 ALL GREEN. Deferred M1,M3,M5,M6 (low risk).
+Phase 10 (DEPLOY): COMPLETE. D-Drive backed up to ~/d-drive-backup-2026-06-22 (689M) and stopped. Shard built + running on pi.local :80 (backend healthy, setup mode). Smoke test PASS: /api/health ok, /api/setup/status setupRequired:true, frontend+assets+SPA routes 200.
+Deploy fixes: setup-config persistence load, setup-mode boot, Dockerfile npm install (workspaces), frontend public copy, wget healthcheck.
+User must complete setup wizard (starter Atlas URI + Google/GitHub OAuth) then 'sudo docker compose restart backend'.
+PROJECT COMPLETE.
