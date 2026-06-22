@@ -49,3 +49,7 @@ Phase 10 (DEPLOY): COMPLETE. D-Drive backed up to ~/d-drive-backup-2026-06-22 (6
 Deploy fixes: setup-config persistence load, setup-mode boot, Dockerfile npm install (workspaces), frontend public copy, wget healthcheck.
 User must complete setup wizard (starter Atlas URI + Google/GitHub OAuth) then 'sudo docker compose restart backend'.
 PROJECT COMPLETE.
+
+=== v2 work started ===
+v2 plan: docs/superpowers/plans/2026-06-22-shard-v2.md. Order A(config-in-db)->C(access)->D(resilience)->B(vercel)->redeploy.
+Live fixes shipped: setup routing (setupRequired), live connectRuntime on configure (no restart), login copy. Backend 316, Frontend 84+2 regression.
