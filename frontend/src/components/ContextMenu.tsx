@@ -12,6 +12,8 @@ interface ContextMenuProps {
   onDownload: () => void;
   onMove: () => void;
   onRefresh: () => void;
+  onShare?: () => void;
+  onPublicLink?: () => void;
 }
 
 export default function ContextMenu({
@@ -23,6 +25,8 @@ export default function ContextMenu({
   onDownload,
   onMove,
   onRefresh,
+  onShare,
+  onPublicLink,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [renaming, setRenaming] = useState(false);
@@ -148,6 +152,30 @@ export default function ContextMenu({
               data-testid="ctx-download"
             >
               Download
+            </button>
+          )}
+
+          {onShare && (
+            <button
+              className="ctx-menu-item"
+              onClick={onShare}
+              role="menuitem"
+              type="button"
+              data-testid="ctx-share"
+            >
+              Share…
+            </button>
+          )}
+
+          {onPublicLink && file.type !== 'folder' && (
+            <button
+              className="ctx-menu-item"
+              onClick={onPublicLink}
+              role="menuitem"
+              type="button"
+              data-testid="ctx-public-link"
+            >
+              Get public link
             </button>
           )}
 

@@ -9,6 +9,8 @@ import FileRow from '../components/FileRow';
 import ContextMenu from '../components/ContextMenu';
 import PreviewModal from '../components/PreviewModal';
 import MoveDialog from '../components/MoveDialog';
+import ShareDialog from '../components/ShareDialog';
+import PublicLinkDialog from '../components/PublicLinkDialog';
 import UploadZone from '../components/UploadZone';
 import UploadProgress from '../components/UploadProgress';
 import { useUpload } from '../hooks/useUpload';
@@ -44,6 +46,12 @@ export default function Drive() {
 
   // Move dialog
   const [moveFile, setMoveFile] = useState<FileItem | null>(null);
+
+  // Share dialog
+  const [shareFile, setShareFile] = useState<FileItem | null>(null);
+
+  // Public link dialog
+  const [publicLinkFile, setPublicLinkFile] = useState<FileItem | null>(null);
 
   const { uploads, uploadFiles } = useUpload(currentFolderId, () => {
     queryClient.invalidateQueries({ queryKey: ['files', currentFolderId] });
@@ -119,6 +127,8 @@ export default function Drive() {
       navigate('/search');
     } else if (s === 'trash') {
       navigate('/trash');
+    } else if (s === 'shared') {
+      navigate('/shared');
     }
   }, [navigate]);
 
@@ -187,6 +197,14 @@ export default function Drive() {
             queryClient.invalidateQueries({ queryKey: ['files', currentFolderId] });
             setCtxMenu(null);
           }}
+          onShare={() => {
+            setShareFile(ctxMenu.file);
+            setCtxMenu(null);
+          }}
+          onPublicLink={() => {
+            setPublicLinkFile(ctxMenu.file);
+            setCtxMenu(null);
+          }}
         />
       )}
 
@@ -205,6 +223,23 @@ export default function Drive() {
             queryClient.invalidateQueries({ queryKey: ['files', currentFolderId] });
             setMoveFile(null);
           }}
+        />
+      )}
+
+      {shareFile && (
+        <ShareDialog
+          file={shareFile}
+          onClose={() => setShareFile(null)}
+          onChanged={() => {
+            queryClient.invalidateQueries({ queryKey: ['files', currentFolderId] });
+          }}
+        />
+      )}
+
+      {publicLinkFile && (
+        <PublicLinkDialog
+          file={publicLinkFile}
+          onClose={() => setPublicLinkFile(null)}
         />
       )}
     </div>

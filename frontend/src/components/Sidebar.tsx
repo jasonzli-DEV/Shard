@@ -43,6 +43,13 @@ export default function Sidebar({ currentSection, onNavigate }: SidebarProps) {
             onClick={() => onNavigate('search')}
           />
           <SidebarItem
+            icon={<SharedIcon />}
+            label="Shared with me"
+            id="shared"
+            active={currentSection === 'shared'}
+            onClick={() => onNavigate('shared')}
+          />
+          <SidebarItem
             icon={<TrashIcon />}
             label="Trash"
             id="trash"
@@ -134,6 +141,18 @@ function TrashIcon() {
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
       <path d="M10 11v6M14 11v6" />
       <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+
+function SharedIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
     </svg>
   );
 }

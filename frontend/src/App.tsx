@@ -12,6 +12,8 @@ const Setup = lazy(() => import('./pages/Setup'));
 const Trash = lazy(() => import('./pages/Trash'));
 const Starred = lazy(() => import('./pages/Starred'));
 const Search = lazy(() => import('./pages/Search'));
+const SharedWithMe = lazy(() => import('./pages/SharedWithMe'));
+const PublicFile = lazy(() => import('./pages/PublicFile'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +75,16 @@ function AppRouter() {
         />
       </Route>
 
+      {/* Public file access — no auth required */}
+      <Route
+        path="/p/:slug"
+        element={
+          <Suspense fallback={<PageFallback />}>
+            <PublicFile />
+          </Suspense>
+        }
+      />
+
       {/* Protected: redirect unauthenticated users to login */}
       <Route element={<ProtectedRoute />}>
         <Route
@@ -112,6 +124,14 @@ function AppRouter() {
           element={
             <Suspense fallback={<PageFallback />}>
               <Search />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/shared"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <SharedWithMe />
             </Suspense>
           }
         />

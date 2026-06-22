@@ -115,3 +115,83 @@ export async function searchFiles(q: string): Promise<FileItem[]> {
   const { data } = await client.get<FileItem[]>('/search', { params: { q } });
   return data;
 }
+
+// ── Sharing ──────────────────────────────────────────────────────────────────
+
+export interface ShareItem {
+  _id: string;
+  fileId: string;
+  sharedWithId: string;
+  sharedWithEmail?: string;
+  sharedWithName?: string;
+  permission: 'view' | 'edit';
+  createdAt: string;
+}
+
+export async function createShare(fileId: string, email: string, permission: 'view' | 'edit'): Promise<ShareItem> {
+  const { data } = await client.post<ShareItem>(`/files/${fileId}/share`, { email, permission });
+  return data;
+}
+
+export async function listShares(fileId: string): Promise<ShareItem[]> {
+  const { data } = await client.get<ShareItem[]>(`/files/${fileId}/shares`);
+  return data;
+}
+
+export async function removeShare(fileId: string, userId: string): Promise<void> {
+  await client.delete(`/files/${fileId}/share/${userId}`);
+}
+
+// ── Public links ─────────────────────────────────────────────────────────────
+
+export interface PublicLinkItem {
+  _id: string;
+  fileId: string;
+  slug: string;
+  expiresAt?: string;
+  downloadCount: number;
+  createdAt: string;
+}
+
+export async function createPublicLink(fileId: string, expiresIn?: number): Promise<PublicLinkItem> {
+  const { data } = await client.post<PublicLinkItem>(`/files/${fileId}/public-link`, expiresIn ? { expiresIn } : {});
+  return data;
+}
+
+export async function listPublicLinks(): Promise<PublicLinkItem[]> {
+  const { data } = await client.get<PublicLinkItem[]>('/public-links');
+  return data;
+}
+
+export async function deletePublicLink(linkId: string): Promise<void> {
+  await client.delete(`/public-links/${linkId}`);
+}
+
+// ── Shared with me ────────────────────────────────────────────────────────────
+
+export interface SharedWithMeItem {
+  _id: string;
+  file: FileItem;
+  owner: { _id: string; name: string; email: string };
+  permission: 'view' | 'edit';
+  createdAt: string;
+}
+
+export async function listSharedWithMe(): Promise<SharedWithMeItem[]> {
+  const { data } = await client.get<SharedWithMeItem[]>('/shared-with-me');
+  return data;
+}
+
+// ── Public file access (unauthenticated) ─────────────────────────────────────
+
+export async function getPublicFile(slug: string): Promise<{
+  _id: string; name: string; path: string; type: string;
+  mimeType?: string; size?: number; createdAt: string; updatedAt: string;
+}> {
+  const { data } = await client.get(`/public/${slug}`);
+  return data;
+}
+
+export function getPublicDownloadUrl(slug: string): string {
+  return `/api/public/${slug}/download`;
+}
