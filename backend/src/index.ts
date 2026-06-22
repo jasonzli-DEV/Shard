@@ -63,9 +63,22 @@ async function rehydrateStorageClusters(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Setup mode: when no starter cluster is configured yet, boot anyway so the
+  // web setup wizard (/api/setup/*) and health check are reachable. The user
+  // completes the wizard (which persists config to SETUP_ENV_FILE_PATH), then
+  // restarts the container — on reboot STARTER_URI is loaded and the app
+  // connects normally. DB-dependent routes are not exercised until then
+  // because the frontend redirects to /setup while setup is required.
   if (!STARTER_URI) {
-    logger.error('STARTER_MONGODB_URI is not set — exiting');
-    process.exit(1);
+    logger.warn(
+      'STARTER_MONGODB_URI not set — starting in SETUP MODE. ' +
+        'Complete the setup wizard in the browser, then restart the container.',
+    );
+    const app = createApp();
+    app.listen(PORT, () => {
+      logger.info(`Shard backend listening on port ${PORT} (setup mode)`);
+    });
+    return;
   }
 
   // Connect isolated named connection (used by auth/session/storage routes)
