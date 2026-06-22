@@ -1,0 +1,33 @@
+.upload-zone {
+  position: relative;
+  flex: 1;
+}
+
+.upload-zone--dragging {
+  /* Subtle border change to signal drop target */
+}
+
+.upload-zone-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 15, 18, 0.88);
+  border: 2px dashed var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.upload-zone-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-accent);
+}
+
+.upload-zone-overlay-content p {
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
