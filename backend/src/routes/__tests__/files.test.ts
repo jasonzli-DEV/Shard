@@ -285,6 +285,25 @@ describe('File routes', () => {
         .set('Cookie', sessionCookie);
       expect(res.status).toBe(400);
     });
+
+    // I1: soft-deleted (trashed) files must not be downloadable
+    it('returns 404 for a trashed (soft-deleted) file', async () => {
+      const fileDoc = await FileModel.create({
+        userId: new Types.ObjectId(userId),
+        name: 'trashed-auth.txt',
+        path: '/trashed-auth.txt',
+        mimeType: 'text/plain',
+        size: 10,
+        type: 'file',
+        deletedAt: new Date(), // soft-deleted
+      });
+
+      const res = await request(app)
+        .get(`/api/files/${fileDoc._id}/download`)
+        .set('Cookie', sessionCookie);
+
+      expect(res.status).toBe(404);
+    });
   });
 
   describe('PATCH /api/files/:id (rename/move/star)', () => {

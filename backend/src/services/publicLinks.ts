@@ -126,6 +126,10 @@ export async function resolveSlug(slug: string): Promise<IFile> {
     throw Object.assign(new Error('File not found'), { code: 'NOT_FOUND' });
   }
 
+  if (file.deletedAt != null) {
+    throw Object.assign(new Error('File has been deleted'), { code: 'NOT_FOUND' });
+  }
+
   return file;
 }
 

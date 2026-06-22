@@ -353,6 +353,58 @@ describe('Public links routes', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // I1: Trashed files must not be served via public links
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  it('GET /api/public/:slug — returns 404 for a trashed (soft-deleted) file', async () => {
+    const file = await FileModel.create({
+      userId: new Types.ObjectId(ownerId),
+      name: 'trashed.txt',
+      path: '/trashed.txt',
+      mimeType: 'text/plain',
+      size: 10,
+      type: 'file' as const,
+      encrypted: false,
+      deletedAt: new Date(), // soft-deleted
+    });
+
+    await PublicLinkModel.create({
+      fileId: file._id,
+      slug: 'trashed-slug-001',
+      createdBy: new Types.ObjectId(ownerId),
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+      downloadCount: 0,
+    });
+
+    const res = await request(app).get('/api/public/trashed-slug-001');
+    expect(res.status).toBe(404);
+  });
+
+  it('GET /api/public/:slug/download — returns 404 for a trashed file', async () => {
+    const file = await FileModel.create({
+      userId: new Types.ObjectId(ownerId),
+      name: 'trashed-dl.txt',
+      path: '/trashed-dl.txt',
+      mimeType: 'text/plain',
+      size: 10,
+      type: 'file' as const,
+      encrypted: false,
+      deletedAt: new Date(), // soft-deleted
+    });
+
+    await PublicLinkModel.create({
+      fileId: file._id,
+      slug: 'trashed-dl-slug-001',
+      createdBy: new Types.ObjectId(ownerId),
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+      downloadCount: 0,
+    });
+
+    const res = await request(app).get('/api/public/trashed-dl-slug-001/download');
+    expect(res.status).toBe(404);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // Slug uniqueness
   // ─────────────────────────────────────────────────────────────────────────────
 

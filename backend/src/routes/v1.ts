@@ -205,6 +205,12 @@ router.get('/files/:id/download', async (req: Request, res: Response) => {
       return;
     }
 
+    // Reject soft-deleted (trashed) files
+    if (file.deletedAt != null) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
     if (file.userId.toString() !== userId) {
       res.status(403).json({ error: 'Forbidden' });
       return;

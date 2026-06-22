@@ -168,6 +168,12 @@ router.get('/files/:id/download', async (req: Request, res: Response) => {
       return;
     }
 
+    // Reject soft-deleted (trashed) files
+    if (file.deletedAt != null) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
     const hasAccess = await canAccess(userId, id, 'view');
     if (!hasAccess) {
       res.status(403).json({ error: 'Forbidden' });
