@@ -1,0 +1,46 @@
+/* ── Step panel — right-side content area ──────────────────────────────── */
+
+.wizard-step-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  height: 100%;
+}
+
+.wizard-step-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.wizard-step-title {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--color-text);
+  line-height: var(--leading-tight);
+}
+
+.wizard-step-description {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-base);
+  max-width: 52ch;
+}
+
+.wizard-step-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.wizard-step-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border);
+}
