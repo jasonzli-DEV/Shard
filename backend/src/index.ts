@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { createApp } from './app';
 import { connectStarter } from './lib/db';
 import { logger } from './utils/logger';
+import { startStorageLoops } from './storage/scheduler';
 
 const PORT = parseInt(process.env.PORT ?? '4000', 10);
 const STARTER_URI = process.env.STARTER_MONGODB_URI;
@@ -19,6 +20,12 @@ async function main(): Promise<void> {
   app.listen(PORT, () => {
     logger.info(`Shard backend listening on port ${PORT}`);
   });
+
+  // Start background storage loops only when not in test mode
+  if (process.env.NODE_ENV !== 'test') {
+    startStorageLoops();
+    logger.info('Storage background loops started');
+  }
 }
 
 main().catch((err: Error) => {
