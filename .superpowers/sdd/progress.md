@@ -24,3 +24,5 @@ Task 5.1-5.4 (Phase 5 file routes + v1 API + storage/orgs): complete (commits 22
 Task 6.1/6.2 (Phase 6 sharing+public links): complete (commits c713d04..0aba65a, 280/280)
 - services/shares.ts{canAccess(userId,fileId,need)} integrated into routes/files.ts; routes/shares.ts (/api/files/:id/share,/api/shared-with-me); routes/publicLinks.ts (/api/public/:slug[/download]); PublicLink model uses createdBy (NOT userId).
 Backend feature-complete. Next: Phase 7 frontend.
+Phase 7a (frontend core 7.1-7.5): complete (commits 394c100..a4d0e83, 30 vitest, build OK)
+- Design system: dark mineral/crystal. tokens in frontend/src/styles/theme.css. accent=Shard blue #4A90D9 (only accent). fonts: DM Serif Display (display), Inter (body), JetBrains Mono (mono). ShardMark.tsx logo. api/client.ts (axios withCredentials, base /api), AuthContext useAuth, routes.tsx. Sidebar present.
