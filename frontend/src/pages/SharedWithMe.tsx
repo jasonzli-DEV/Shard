@@ -21,6 +21,7 @@ export default function SharedWithMe() {
       else if (section === 'starred') navigate('/starred');
       else if (section === 'search') navigate('/search');
       else if (section === 'trash') navigate('/trash');
+      else if (section === 'shared') navigate('/shared');
     },
     [navigate],
   );
@@ -84,7 +85,7 @@ function SharedRow({ item }: { item: SharedWithMeItem }) {
 
 function FolderIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="#4A90D9" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" opacity="0.8" />
     </svg>
   );

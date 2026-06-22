@@ -184,10 +184,18 @@ export async function listSharedWithMe(): Promise<SharedWithMeItem[]> {
 
 // ── Public file access (unauthenticated) ─────────────────────────────────────
 
-export async function getPublicFile(slug: string): Promise<{
-  _id: string; name: string; path: string; type: string;
-  mimeType?: string; size?: number; createdAt: string; updatedAt: string;
-}> {
+export interface PublicFileMeta {
+  _id: string;
+  name: string;
+  path: string;
+  type: string;
+  mimeType?: string;
+  size?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getPublicFile(slug: string): Promise<PublicFileMeta> {
   const { data } = await client.get(`/public/${slug}`);
   return data;
 }

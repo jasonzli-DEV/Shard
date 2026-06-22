@@ -2,19 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ShardMark from '../components/ShardMark';
 import { getPublicFile, getPublicDownloadUrl } from '../api/files';
+import type { PublicFileMeta } from '../api/files';
 import '../styles/theme.css';
 import './PublicFile.css';
-
-interface PublicFileMeta {
-  _id: string;
-  name: string;
-  path: string;
-  type: string;
-  mimeType?: string;
-  size?: number;
-  createdAt: string;
-  updatedAt: string;
-}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -41,12 +31,12 @@ export default function PublicFile() {
         setFile(data);
         setLoading(false);
       })
-      .catch((err: { response?: { status?: number } } & Error) => {
-        const status = err?.response?.status;
+      .catch((err: unknown) => {
+        const status = (err as { status?: number }).status;
         if (status === 404 || status === 410) {
           setNotFound(true);
         } else {
-          setError(err?.message ?? 'Failed to load file');
+          setError(err instanceof Error ? err.message : 'Failed to load file');
         }
         setLoading(false);
       });

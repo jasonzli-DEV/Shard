@@ -207,7 +207,7 @@ describe('PublicFile page', () => {
   });
 
   it('shows expired/not found message on 404', async () => {
-    const err = Object.assign(new Error('Not found'), { response: { status: 404 } });
+    const err = Object.assign(new Error('Not found'), { status: 404 });
     mockGetPublicFile.mockRejectedValue(err);
 
     renderPublicFile('dead-slug');
@@ -218,7 +218,7 @@ describe('PublicFile page', () => {
   });
 
   it('shows expired message on 410', async () => {
-    const err = Object.assign(new Error('Gone'), { response: { status: 410 } });
+    const err = Object.assign(new Error('Gone'), { status: 410 });
     mockGetPublicFile.mockRejectedValue(err);
 
     renderPublicFile('expired-slug');

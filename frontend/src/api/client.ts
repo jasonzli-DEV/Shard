@@ -14,7 +14,10 @@ client.interceptors.response.use(
   (error) => {
     const message: string =
       error.response?.data?.error ?? error.message ?? 'Unknown error';
-    return Promise.reject(new Error(message));
+    const status: number | undefined = error.response?.status;
+    const err = new Error(message) as Error & { status?: number };
+    if (status !== undefined) err.status = status;
+    return Promise.reject(err);
   },
 );
 
