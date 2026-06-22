@@ -7,6 +7,7 @@ import authRouter, { meHandler } from './routes/auth';
 import apiKeysRouter from './routes/apiKeys';
 import filesRouter from './routes/files';
 import sharesRouter from './routes/shares';
+import publicLinksRouter from './routes/publicLinks';
 import v1Router from './routes/v1';
 import storageRouter from './routes/storage';
 import { requireAuth } from './middleware/auth';
@@ -49,6 +50,9 @@ export function createApp(): Application {
   app.use('/api/auth', authRouter);
   app.get('/api/me', requireAuth, meHandler);
   app.use('/api/keys', apiKeysRouter);
+  // publicLinksRouter must be mounted BEFORE filesRouter because filesRouter
+  // applies requireAuth globally and would intercept /api/public/:slug requests.
+  app.use('/api', publicLinksRouter);
   app.use('/api', filesRouter);
   app.use('/api', sharesRouter);
   app.use('/api', storageRouter);
