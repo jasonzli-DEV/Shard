@@ -39,13 +39,14 @@ function AppRouter() {
     client
       .get('/setup/status')
       .then((res) => {
-        // If status endpoint returns configured:true, setup is done
-        const configured = res.data?.configured ?? false;
-        setSetupStatus(configured ? 'done' : 'needed');
+        // The backend returns { setupRequired: boolean, configured: {...flags} }.
+        // `configured` is an object (always truthy) — the source of truth is
+        // the explicit setupRequired flag.
+        setSetupStatus(res.data?.setupRequired ? 'needed' : 'done');
       })
       .catch(() => {
-        // 404 means Phase 8 backend not yet present — treat as "needed"
-        // Any other error: default to done so users can reach login
+        // Status endpoint unreachable — assume setup is needed so the operator
+        // reaches the wizard rather than a dead login page.
         setSetupStatus('needed');
       });
   }, []);

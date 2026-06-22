@@ -225,6 +225,23 @@ router.post('/configure', async (req: Request, res: Response) => {
     logger.warn('Setup: passport re-init failed (non-fatal)', err);
   }
 
+  // Bring the runtime online live (connect DB, rehydrate clusters, start loops)
+  // so the operator can sign in immediately — no container restart required.
+  // Skipped under the test runner, which injects its own DB connections.
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const { connectRuntime } = await import('../lib/runtime');
+      await connectRuntime(starterUri);
+      logger.info('Setup: runtime connected — Shard is live');
+    } catch (err) {
+      logger.error('Setup: runtime activation failed', err);
+      return res.status(500).json({
+        error: 'Configuration saved but the app could not connect to the database',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   return res.json({
     success: true,
     message: 'Configuration saved. You can now sign in.',

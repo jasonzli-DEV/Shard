@@ -36,7 +36,7 @@ export default function Login() {
           <header className="login-form-header">
             <h2 className="login-form-title">Sign in</h2>
             <p className="login-form-sub">
-              Access your Shard instance. Only invited users can sign in.
+              Welcome back. Sign in to access your files.
             </p>
           </header>
 
@@ -59,10 +59,6 @@ export default function Login() {
               Continue with GitHub
             </a>
           </div>
-
-          <p className="login-footnote">
-            The first user to sign in becomes admin.
-          </p>
         </div>
       </main>
     </div>
