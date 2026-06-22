@@ -9,7 +9,7 @@ import { Types } from 'mongoose';
 import { FileModel, type IFile } from '../models/File';
 import { BlobModel } from '../models/Blob';
 import { StorageClusterModel } from '../models/StorageCluster';
-import { getBucket, USABLE_BYTES } from './clusterManager';
+import { getOrOpenBucket, USABLE_BYTES } from './clusterManager';
 import { ensureCapacity } from './provisioner';
 import { encryptBuffer, decryptBuffer, ENCRYPTION_OVERHEAD } from '../utils/crypto';
 import { getUniqueName, buildPath } from '../utils/paths';
@@ -71,14 +71,18 @@ export async function storeFile(opts: StoreFileOptions): Promise<IFile | null> {
 
   try {
     while (offset < payload.length) {
-      // Ask provisioner for a cluster with room for at least 1 byte
-      const cluster = await ensureCapacity(userId, payload.length - offset);
+      // Ask for at least 1 byte of free space.  ensureCapacity returns the
+      // active cluster when it has any usable room, and provisions a new one
+      // only when the active cluster is full.  chunkSize below handles the
+      // partial-fill: we write only what fits, then loop for the remainder.
+      const cluster = await ensureCapacity(userId, 1);
       const free = USABLE_BYTES - cluster.storageUsedBytes;
       const chunkSize = Math.min(free, payload.length - offset);
       const chunk = payload.subarray(offset, offset + chunkSize);
 
-      // Write chunk to GridFS on this cluster
-      const bucket = getBucket(cluster.clusterId);
+      // Write chunk to GridFS on this cluster.
+      // getOrOpenBucket opens the connection lazily if it was not rehydrated at boot.
+      const bucket = await getOrOpenBucket(cluster.clusterId);
       if (!bucket) {
         throw new Error(`No GridFS bucket available for cluster ${cluster.clusterId}`);
       }
@@ -109,7 +113,7 @@ export async function storeFile(opts: StoreFileOptions): Promise<IFile | null> {
       try {
         const clusterDoc = await StorageClusterModel.findById(blob.clusterId);
         if (clusterDoc) {
-          const bucket = getBucket(clusterDoc.clusterId);
+          const bucket = await getOrOpenBucket(clusterDoc.clusterId);
           if (bucket) {
             await deleteFromGridFS(bucket as MongooseGridFSBucket, blob.gridfsId);
           }
@@ -151,7 +155,7 @@ export async function readFile(fileId: string, encryptionKey?: string): Promise<
     if (!clusterDoc) {
       throw new Error(`StorageCluster not found for blob ${blob._id}`);
     }
-    const bucket = getBucket(clusterDoc.clusterId);
+    const bucket = await getOrOpenBucket(clusterDoc.clusterId);
     if (!bucket) {
       throw new Error(`No GridFS bucket for cluster ${clusterDoc.clusterId}`);
     }
@@ -183,7 +187,7 @@ export async function deleteFileBytes(fileId: string): Promise<void> {
     try {
       const clusterDoc = await StorageClusterModel.findById(blob.clusterId);
       if (clusterDoc) {
-        const bucket = getBucket(clusterDoc.clusterId);
+        const bucket = await getOrOpenBucket(clusterDoc.clusterId);
         if (bucket) {
           await deleteFromGridFS(bucket as MongooseGridFSBucket, blob.gridfsId);
         }

@@ -47,6 +47,39 @@ export function getBucket(clusterId: string): unknown | null {
   return gridFSBuckets.get(clusterId) ?? null;
 }
 
+/**
+ * Lazily open a cluster connection on demand.
+ * If the connection is already open this is a no-op.
+ * Looks up the StorageCluster doc by clusterId to retrieve the URI.
+ * Returns the bucket on success, null if the cluster doc is not found or
+ * the connection cannot be opened (errors are logged, not rethrown).
+ */
+export async function getOrOpenBucket(clusterId: string): Promise<unknown | null> {
+  // Fast path: already connected
+  const fast = getBucket(clusterId);
+  if (fast !== null) return fast;
+
+  try {
+    const clusterDoc = await StorageClusterModel.findOne({ clusterId });
+    if (!clusterDoc) return null;
+
+    await openCluster({
+      clusterId: clusterDoc.clusterId,
+      connectionUri: clusterDoc.connectionUri,
+      userId: clusterDoc.userId.toString(),
+      status: clusterDoc.status,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Import lazily to avoid a circular reference at module load time
+    const { logger } = await import('../utils/logger');
+    logger.error(`clusterManager: failed to open cluster "${clusterId}" on demand`, { error: msg });
+    return null;
+  }
+
+  return getBucket(clusterId);
+}
+
 export async function getActiveCluster(userId: string): Promise<IStorageCluster | null> {
   return StorageClusterModel.findOne({ userId, status: 'active' });
 }
