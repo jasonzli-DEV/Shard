@@ -1,7 +1,14 @@
 import mongoose from 'mongoose';
 import { StorageClusterModel, type IStorageCluster } from '../models';
 
-const STORAGE_THRESHOLD = 0.8;
+/** Hard Atlas M0 limit per cluster */
+export const STORAGE_LIMIT_BYTES = 512 * 1024 * 1024; // 512 MB
+/** Safety margin below the hard limit to avoid Atlas throttling/blocking */
+export const SAFETY_MARGIN_BYTES = 20 * 1024 * 1024; // 20 MB
+/** Usable capacity per cluster for packing — synchronous upload path fills up to this */
+export const USABLE_BYTES = STORAGE_LIMIT_BYTES - SAFETY_MARGIN_BYTES; // 492 MB
+/** Pre-warm threshold: start provisioning the next cluster once active passes this fraction of USABLE_BYTES */
+const PREWARM_THRESHOLD = 0.9;
 
 interface ClusterEntry {
   clusterId: string;
@@ -67,8 +74,7 @@ export async function runStorageCheck(userId: string): Promise<StorageCheckResul
     { new: true },
   ).catch(() => null);
 
-  const capacity = cluster.storageCapacityBytes ?? 512 * 1024 * 1024;
-  const atThreshold = usedBytes >= capacity * STORAGE_THRESHOLD;
+  const atThreshold = usedBytes >= USABLE_BYTES * PREWARM_THRESHOLD;
 
   return {
     checked: true,

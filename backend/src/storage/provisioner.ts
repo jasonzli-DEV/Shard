@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid';
 import { Types } from 'mongoose';
 import { OrgKeyModel, StorageClusterModel, type IStorageCluster } from '../models';
 import { makeAtlasClient } from '../atlas/client';
-import { openCluster, getActiveCluster } from './clusterManager';
+import { openCluster, getActiveCluster, USABLE_BYTES } from './clusterManager';
 
 const ORG_CLUSTER_CAP = 250;
 
@@ -109,12 +109,13 @@ export async function ensureCapacity(
   const active = await getActiveCluster(userId);
 
   if (active) {
-    const free = active.storageCapacityBytes - active.storageUsedBytes;
+    // Pack up to USABLE_BYTES — no percentage gate, just hard safety margin
+    const free = USABLE_BYTES - active.storageUsedBytes;
     if (free >= neededBytes) {
       return active;
     }
   }
 
-  // Need to provision a new cluster
+  // No cluster, or active cluster doesn't have USABLE_BYTES room for this upload
   return provisionNextCluster(userId);
 }

@@ -174,10 +174,15 @@ describe('clusterManager', () => {
   });
 
   describe('runStorageCheck', () => {
-    it('returns atThreshold=false when storage is below 80% of 512MB', async () => {
-      const LIMIT = 512 * 1024 * 1024;
-      // 50% of limit
-      const used = Math.floor(LIMIT * 0.5);
+    // STORAGE_LIMIT_BYTES = 512MB, SAFETY_MARGIN_BYTES = 20MB, USABLE_BYTES = 492MB
+    // PREWARM_THRESHOLD = 0.90 of USABLE_BYTES = 442.8MB
+    const STORAGE_LIMIT = 512 * 1024 * 1024;
+    const SAFETY_MARGIN = 20 * 1024 * 1024;
+    const USABLE = STORAGE_LIMIT - SAFETY_MARGIN; // 492MB
+
+    it('returns atThreshold=false when storage is below 90% of USABLE_BYTES', async () => {
+      // 50% of USABLE — well below prewarm threshold
+      const used = Math.floor(USABLE * 0.5);
       const dataSize = Math.floor(used * 0.7);
       const indexSize = used - dataSize;
 
@@ -199,7 +204,7 @@ describe('clusterManager', () => {
         userId,
         status: 'active',
         storageUsedBytes: 0,
-        storageCapacityBytes: LIMIT,
+        storageCapacityBytes: STORAGE_LIMIT,
       };
       (mockStorageClusterModel.findOne as jest.Mock).mockResolvedValue(mockCluster);
       (mockStorageClusterModel.findOneAndUpdate as jest.Mock).mockResolvedValue(mockCluster);
@@ -211,10 +216,9 @@ describe('clusterManager', () => {
       expect(result.usedBytes).toBe(dataSize + indexSize);
     });
 
-    it('returns atThreshold=true when storage is at or above 80% of 512MB', async () => {
-      const LIMIT = 512 * 1024 * 1024;
-      // 81% of limit
-      const used = Math.floor(LIMIT * 0.81);
+    it('returns atThreshold=true when storage is at or above 90% of USABLE_BYTES (pre-warm threshold)', async () => {
+      // 91% of USABLE — above PREWARM_THRESHOLD
+      const used = Math.floor(USABLE * 0.91);
       const dataSize = Math.floor(used * 0.7);
       const indexSize = used - dataSize;
 
@@ -236,7 +240,7 @@ describe('clusterManager', () => {
         userId,
         status: 'active',
         storageUsedBytes: 0,
-        storageCapacityBytes: LIMIT,
+        storageCapacityBytes: STORAGE_LIMIT,
       };
       (mockStorageClusterModel.findOne as jest.Mock).mockResolvedValue(mockCluster);
       (mockStorageClusterModel.findOneAndUpdate as jest.Mock).mockResolvedValue(mockCluster);
@@ -245,7 +249,44 @@ describe('clusterManager', () => {
 
       expect(result.checked).toBe(true);
       expect(result.atThreshold).toBe(true);
-      expect(result.usedBytes).toBeGreaterThanOrEqual(LIMIT * 0.8);
+      // 91% of 492MB is well above 90% of 492MB
+      expect(result.usedBytes).toBeGreaterThanOrEqual(USABLE * 0.9);
+    });
+
+    it('returns atThreshold=false when storage is between 80% of LIMIT and 90% of USABLE (packs without pre-warming)', async () => {
+      // 82% of STORAGE_LIMIT ≈ 419MB, but USABLE is 492MB so 0.9*492≈442MB — below pre-warm
+      const used = Math.floor(STORAGE_LIMIT * 0.82);
+      const dataSize = Math.floor(used * 0.7);
+      const indexSize = used - dataSize;
+
+      const db = makeDbStub(dataSize, indexSize);
+      const conn = makeConnStub(db);
+      mockCreateConnection.mockReturnValue(conn);
+
+      const entry = {
+        clusterId: 'cluster-check-mid',
+        connectionUri: 'mongodb+srv://u:p@host/db',
+        userId,
+        status: 'active' as const,
+      };
+      await openCluster(entry);
+
+      const mockCluster = {
+        _id: new Types.ObjectId(),
+        clusterId: 'cluster-check-mid',
+        userId,
+        status: 'active',
+        storageUsedBytes: 0,
+        storageCapacityBytes: STORAGE_LIMIT,
+      };
+      (mockStorageClusterModel.findOne as jest.Mock).mockResolvedValue(mockCluster);
+      (mockStorageClusterModel.findOneAndUpdate as jest.Mock).mockResolvedValue(mockCluster);
+
+      const result = await runStorageCheck(userId);
+
+      expect(result.checked).toBe(true);
+      // 82% of 512MB = 419MB < 90% of 492MB = 442.8MB, so NOT at prewarm threshold
+      expect(result.atThreshold).toBe(false);
     });
 
     it('returns checked=false when no active cluster connection found', async () => {

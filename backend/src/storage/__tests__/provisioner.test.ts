@@ -21,6 +21,9 @@ jest.mock('../clusterManager', () => ({
   openCluster: jest.fn(),
   getActiveCluster: jest.fn(),
   runStorageCheck: jest.fn(),
+  STORAGE_LIMIT_BYTES: 512 * 1024 * 1024,
+  SAFETY_MARGIN_BYTES: 20 * 1024 * 1024,
+  USABLE_BYTES: (512 - 20) * 1024 * 1024, // 492MB
 }));
 
 import { OrgKeyModel, StorageClusterModel } from '../../models';
@@ -196,19 +199,44 @@ describe('provisioner', () => {
   });
 
   describe('ensureCapacity', () => {
-    it('returns active cluster when it has enough room', async () => {
+    // Packing uses USABLE_BYTES = 512MB - 20MB = 492MB
+    const STORAGE_LIMIT = 512 * 1024 * 1024;
+    const SAFETY_MARGIN = 20 * 1024 * 1024;
+    const USABLE = STORAGE_LIMIT - SAFETY_MARGIN; // 492MB
+
+    it('returns active cluster when it has enough room (within USABLE_BYTES)', async () => {
       const activeCluster = {
         _id: new Types.ObjectId(),
         clusterId: 'cluster-has-room',
         status: 'active',
         userId,
         storageUsedBytes: 100_000,
-        storageCapacityBytes: 512 * 1024 * 1024,
+        storageCapacityBytes: STORAGE_LIMIT,
       };
       mockGetActiveCluster.mockResolvedValue(activeCluster as unknown as Awaited<ReturnType<typeof getActiveCluster>>);
 
       const result = await ensureCapacity(userId, 50_000);
       expect(result).toEqual(activeCluster);
+    });
+
+    it('returns active cluster at 85% of USABLE — old 80% gate must be gone', async () => {
+      // 85% of USABLE = ~418MB — the old code would have spilled to a new cluster at 80% of 512MB (409MB)
+      // New code: free = USABLE - used = 492MB - 418MB = 74MB; should still accept uploads up to 74MB
+      const used = Math.floor(USABLE * 0.85);
+      const activeCluster = {
+        _id: new Types.ObjectId(),
+        clusterId: 'cluster-85pct',
+        status: 'active',
+        userId,
+        storageUsedBytes: used,
+        storageCapacityBytes: STORAGE_LIMIT,
+      };
+      mockGetActiveCluster.mockResolvedValue(activeCluster as unknown as Awaited<ReturnType<typeof getActiveCluster>>);
+
+      // Request 1MB — should fit since 74MB is free
+      const result = await ensureCapacity(userId, 1024 * 1024);
+      expect(result).toEqual(activeCluster);
+      expect(mockOrgKeyModel.find).not.toHaveBeenCalled(); // no provisioning
     });
 
     it('provisions new cluster when no active cluster exists', async () => {
@@ -226,7 +254,7 @@ describe('provisioner', () => {
         status: 'active',
         userId,
         storageUsedBytes: 0,
-        storageCapacityBytes: 512 * 1024 * 1024,
+        storageCapacityBytes: STORAGE_LIMIT,
       };
       (mockStorageClusterModel.findOne as jest.Mock).mockResolvedValue(null);
       (mockStorageClusterModel.updateMany as jest.Mock).mockResolvedValue({});
@@ -238,15 +266,16 @@ describe('provisioner', () => {
       expect(atlasClient.createProject).toHaveBeenCalled();
     });
 
-    it('provisions new cluster when current cluster has insufficient space', async () => {
-      const LIMIT = 512 * 1024 * 1024;
+    it('provisions new cluster when USABLE_BYTES would be exceeded', async () => {
+      // 98% of USABLE used — only 2% free (≈9.8MB), need 100MB → spill
+      const used = Math.floor(USABLE * 0.98);
       const activeCluster = {
         _id: new Types.ObjectId(),
-        clusterId: 'cluster-full',
+        clusterId: 'cluster-nearly-full',
         status: 'active',
         userId,
-        storageUsedBytes: LIMIT * 0.95, // 95% full
-        storageCapacityBytes: LIMIT,
+        storageUsedBytes: used,
+        storageCapacityBytes: STORAGE_LIMIT,
       };
       mockGetActiveCluster.mockResolvedValue(activeCluster as unknown as Awaited<ReturnType<typeof getActiveCluster>>);
 
@@ -262,14 +291,14 @@ describe('provisioner', () => {
         status: 'active',
         userId,
         storageUsedBytes: 0,
-        storageCapacityBytes: LIMIT,
+        storageCapacityBytes: STORAGE_LIMIT,
       };
       (mockStorageClusterModel.findOne as jest.Mock).mockResolvedValue(activeCluster);
       (mockStorageClusterModel.updateMany as jest.Mock).mockResolvedValue({});
       (mockStorageClusterModel.create as jest.Mock).mockResolvedValue(newCluster);
       (mockOrgKeyModel.findByIdAndUpdate as jest.Mock).mockResolvedValue({});
 
-      // neededBytes = 100MB, but only 5% free (25MB) — needs new cluster
+      // neededBytes = 100MB, but only 2% of 492MB = ~9.8MB free
       const neededBytes = 100 * 1024 * 1024;
       const result = await ensureCapacity(userId, neededBytes);
       expect(result).toBeDefined();
@@ -277,14 +306,13 @@ describe('provisioner', () => {
     });
 
     it('returns active cluster without provisioning when there is enough space', async () => {
-      const LIMIT = 512 * 1024 * 1024;
       const activeCluster = {
         _id: new Types.ObjectId(),
         clusterId: 'cluster-plenty',
         status: 'active',
         userId,
         storageUsedBytes: 1024, // almost empty
-        storageCapacityBytes: LIMIT,
+        storageCapacityBytes: STORAGE_LIMIT,
       };
       mockGetActiveCluster.mockResolvedValue(activeCluster as unknown as Awaited<ReturnType<typeof getActiveCluster>>);
 
