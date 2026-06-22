@@ -3,7 +3,8 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production
+# Install ALL deps (including devDeps such as typescript) for the build step
+RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
@@ -17,7 +18,8 @@ WORKDIR /app
 RUN addgroup -S shard && adduser -S shard -G shard
 
 COPY --from=builder /app/package*.json ./
-RUN npm ci --only=production
+# Production-only deps in the final image
+RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
