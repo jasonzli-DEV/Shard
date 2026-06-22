@@ -1,6 +1,11 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import passport from 'passport';
+import { configurePassport } from './auth/passport';
+import authRouter, { meHandler } from './routes/auth';
+import apiKeysRouter from './routes/apiKeys';
+import { requireAuth } from './middleware/auth';
 
 export function createApp(): Application {
   const app = express();
@@ -28,10 +33,18 @@ export function createApp(): Application {
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
 
+  // ── Passport ──────────────────────────────────────────────────────────────
+  configurePassport();
+  app.use(passport.initialize());
+
   // ── Routes ────────────────────────────────────────────────────────────────
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok' });
   });
+
+  app.use('/api/auth', authRouter);
+  app.get('/api/me', requireAuth, meHandler);
+  app.use('/api/keys', apiKeysRouter);
 
   // ── Error handler ─────────────────────────────────────────────────────────
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
