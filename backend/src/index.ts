@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import dotenv from 'dotenv';
+import fs from 'fs';
 import mongoose from 'mongoose';
 import { createApp } from './app';
 import { connectStarter } from './lib/db';
@@ -6,6 +8,17 @@ import { logger } from './utils/logger';
 import { startStorageLoops } from './storage/scheduler';
 import { openCluster } from './storage/clusterManager';
 import { StorageClusterModel } from './models';
+
+// Load values persisted by the setup wizard (written to SETUP_ENV_FILE_PATH,
+// a mounted volume) so configuration survives container restarts. These
+// override the base .env baked in via env_file, since the wizard is the
+// source of truth once setup has run.
+const SETUP_ENV_FILE_PATH =
+  process.env.SETUP_ENV_FILE_PATH ?? `${process.cwd()}/config/.env`;
+if (fs.existsSync(SETUP_ENV_FILE_PATH)) {
+  dotenv.config({ path: SETUP_ENV_FILE_PATH, override: true });
+  logger.info(`Loaded persisted setup config from ${SETUP_ENV_FILE_PATH}`);
+}
 
 const PORT = parseInt(process.env.PORT ?? '4000', 10);
 const STARTER_URI = process.env.STARTER_MONGODB_URI;
