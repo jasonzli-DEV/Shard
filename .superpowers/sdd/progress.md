@@ -26,3 +26,10 @@ Task 6.1/6.2 (Phase 6 sharing+public links): complete (commits c713d04..0aba65a,
 Backend feature-complete. Next: Phase 7 frontend.
 Phase 7a (frontend core 7.1-7.5): complete (commits 394c100..a4d0e83, 30 vitest, build OK)
 - Design system: dark mineral/crystal. tokens in frontend/src/styles/theme.css. accent=Shard blue #4A90D9 (only accent). fonts: DM Serif Display (display), Inter (body), JetBrains Mono (mono). ShardMark.tsx logo. api/client.ts (axios withCredentials, base /api), AuthContext useAuth, routes.tsx. Sidebar present.
+Task 7.6 (Trash/Starred/Search views): complete (commits cd78b03..11c3ae9, review clean)
+Task 7.7 (Sharing UI, PublicFile, SharedWithMe): complete (commits 11c3ae9..03b8be0, 2 commits, review clean after fix pass — status preserved on interceptor)
+Task 7.8 (Dashboard, Settings): complete (commits 03b8be0..e824078, 2 commits, review clean after fix pass — CSS vars enforced)
+Phase 7b complete. Commits cd78b03..e824078. 53 vitest, build OK.
+Phase 7b FINAL (all fixes): complete (commit 1cb10e1, 53 vitest, build OK, tsc clean)
+Phase 7b (frontend 7.6-7.8): complete (commits 11c3ae9..1cb10e1, 53 vitest, build OK)
+- pages: Trash,Starred,Search,SharedWithMe,PublicFile(/p/:slug no auth),Dashboard,Settings. components: ShareDialog,PublicLinkDialog. Frontend feature-complete except Setup wizard (Phase 8).
