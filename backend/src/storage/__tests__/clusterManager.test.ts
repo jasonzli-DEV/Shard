@@ -24,6 +24,7 @@ import {
   getActiveCluster,
   runStorageCheck,
   keepalive,
+  closeCluster,
   closeAll,
 } from '../clusterManager';
 
@@ -351,6 +352,32 @@ describe('clusterManager', () => {
       // Should not throw
       await expect(keepalive()).resolves.not.toThrow();
       expect(db.command).toHaveBeenCalledWith({ ping: 1 });
+    });
+  });
+
+  describe('closeCluster', () => {
+    it('closes a single cluster connection and removes it from caches', async () => {
+      const db = makeDbStub(0, 0);
+      const conn = makeConnStub(db);
+      mockCreateConnection.mockReturnValue(conn);
+
+      const entry = {
+        clusterId: 'cluster-single-close',
+        connectionUri: 'mongodb+srv://u:p@host/db',
+        userId,
+        status: 'active' as const,
+      };
+      await openCluster(entry);
+
+      await closeCluster('cluster-single-close');
+
+      expect(conn.close).toHaveBeenCalled();
+      expect(getBucket('cluster-single-close')).toBeNull();
+    });
+
+    it('is a no-op for an unknown clusterId', async () => {
+      // Should not throw
+      await expect(closeCluster('nonexistent-cluster')).resolves.not.toThrow();
     });
   });
 

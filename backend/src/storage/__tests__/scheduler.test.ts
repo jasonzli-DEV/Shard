@@ -13,15 +13,21 @@ jest.mock('../provisioner', () => ({
   provisionNextCluster: jest.fn(),
 }));
 
+jest.mock('../decommission', () => ({
+  decommissionEmptyClusters: jest.fn(),
+}));
+
 import { StorageClusterModel } from '../../models';
 import { runStorageCheck, keepalive } from '../clusterManager';
 import { provisionNextCluster } from '../provisioner';
+import { decommissionEmptyClusters } from '../decommission';
 import { startStorageLoops, stopStorageLoops } from '../scheduler';
 
 const mockStorageClusterModel = StorageClusterModel as jest.Mocked<typeof StorageClusterModel>;
 const mockRunStorageCheck = runStorageCheck as jest.MockedFunction<typeof runStorageCheck>;
 const mockKeepalive = keepalive as jest.MockedFunction<typeof keepalive>;
 const mockProvisionNextCluster = provisionNextCluster as jest.MockedFunction<typeof provisionNextCluster>;
+const mockDecommissionEmptyClusters = decommissionEmptyClusters as jest.MockedFunction<typeof decommissionEmptyClusters>;
 
 describe('scheduler', () => {
   beforeEach(() => {
@@ -124,6 +130,55 @@ describe('scheduler', () => {
 
       // Should not throw or crash
       expect(mockKeepalive).toHaveBeenCalled();
+    });
+
+    it('runs empty-cluster sweep every 30 minutes', async () => {
+      mockKeepalive.mockResolvedValue(undefined);
+      mockDecommissionEmptyClusters.mockResolvedValue(undefined);
+      mockRunStorageCheck.mockResolvedValue({ checked: false });
+
+      const testUserId = '507f1f77bcf86cd799439099';
+      const chain = {
+        lean: jest.fn().mockResolvedValue([
+          { userId: { toString: () => testUserId }, clusterId: 'c-sweep', status: 'full' },
+        ]),
+      };
+      (mockStorageClusterModel.find as jest.Mock).mockReturnValue(chain);
+
+      startStorageLoops();
+
+      // Advance 30 min — should trigger EMPTY_SWEEP
+      await jest.advanceTimersByTimeAsync(30 * 60_000);
+
+      expect(mockDecommissionEmptyClusters).toHaveBeenCalledWith(testUserId);
+    });
+
+    it('calls decommissionEmptyClusters for each user with any cluster', async () => {
+      mockKeepalive.mockResolvedValue(undefined);
+      mockDecommissionEmptyClusters.mockResolvedValue(undefined);
+      mockRunStorageCheck.mockResolvedValue({ checked: false });
+
+      const userId1 = '507f1f77bcf86cd799439011';
+      const userId2 = '507f1f77bcf86cd799439012';
+
+      // find() returns clusters for all users (used by both storageCheck and empty sweep)
+      const chain = {
+        lean: jest.fn().mockResolvedValue([
+          { userId: { toString: () => userId1 }, clusterId: 'c1', status: 'full' },
+          { userId: { toString: () => userId2 }, clusterId: 'c2', status: 'active' },
+          { userId: { toString: () => userId1 }, clusterId: 'c3', status: 'active' },
+        ]),
+      };
+      (mockStorageClusterModel.find as jest.Mock).mockReturnValue(chain);
+
+      startStorageLoops();
+
+      await jest.advanceTimersByTimeAsync(30 * 60_000);
+
+      expect(mockDecommissionEmptyClusters).toHaveBeenCalledWith(userId1);
+      expect(mockDecommissionEmptyClusters).toHaveBeenCalledWith(userId2);
+      // Each called exactly once even though userId1 appears twice
+      expect(mockDecommissionEmptyClusters).toHaveBeenCalledTimes(2);
     });
   });
 

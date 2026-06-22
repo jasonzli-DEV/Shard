@@ -93,6 +93,14 @@ export async function keepalive(): Promise<void> {
   }
 }
 
+export async function closeCluster(clusterId: string): Promise<void> {
+  const record = connections.get(clusterId);
+  if (!record) return;
+  await (record.conn as unknown as { close?(): Promise<void> }).close?.().catch(() => null);
+  connections.delete(clusterId);
+  gridFSBuckets.delete(clusterId);
+}
+
 export async function closeAll(): Promise<void> {
   for (const { conn } of connections.values()) {
     await (conn as unknown as { close?(): Promise<void> }).close?.().catch(() => null);
