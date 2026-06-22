@@ -87,8 +87,12 @@ Shard is a fork of **D-Drive** (Discord-backed storage) re-architected to use **
 
 ## 5. Autoscaler (ported from Aura, made per-user)
 
-- Constants: `STORAGE_LIMIT = 512MB`, `THRESHOLD = 0.80`, `WARN = 0.75`, `STORAGE_CHECK = 10min`, `KEEPALIVE = 60s`.
-- Every interval: for each user's active cluster, run `dbStats`, compute `dataSize + indexSize`, persist `storageUsedBytes`. At ≥80%, **provision the next M0** in that user's current org:
+- Constants: `STORAGE_LIMIT = 512MB`, `SAFETY_MARGIN = 20MB` → `USABLE = 492MB`, `PREWARM_THRESHOLD = 0.90` (of usable), `STORAGE_CHECK = 10min`, `KEEPALIVE = 60s`, `ORG_CLUSTER_CAP = 250`, `EMPTY_SWEEP = 30min`.
+- **Packing (synchronous upload path):** byte-routing fills the active cluster up to `USABLE` (492MB — a margin below M0's hard 512MB cap, where Atlas throttles/blocks writes), splitting a file across clusters and provisioning a new one on demand when none have room. There is **no 80% gate** on packing — clusters pack nearly full before spilling.
+- **Pre-warm (background, optional):** the 10-min check pre-provisions the *next* cluster once the active one passes `PREWARM_THRESHOLD` (90% of usable) so synchronous uploads don't stall ~minutes waiting for Atlas. This is a latency optimization, not a packing limit.
+- **Region:** configurable. `ATLAS_DEFAULT_REGION` env (default `US_EAST_1`) with an optional per-`OrgKey` `region` override; validated against the known M0-eligible region list.
+- **Downscaling (decommission):** a background sweep (every 30min) + a post-delete trigger tear down **empty, non-active** clusters — Atlas `deleteCluster` + `deleteProject`, decrement `OrgKey.clusterCount`, remove the `StorageCluster` record, close its connection. Never removes the last remaining cluster or the active one. (Blob compaction/migration across sparse clusters is out of scope for now.)
+- Every interval: for each user's active cluster, run `dbStats`, compute `dataSize + indexSize`, persist `storageUsedBytes`. On pre-warm/packing need, **provision the next M0** in that user's current org:
   - `createProject(orgId, name)` → `createCluster(projectId, name, M0/TENANT/AWS US_EAST_1)` → `waitForCluster(IDLE)` → `createDatabaseUser` → `addIpAllowlist(0.0.0.0/0)` → build URI → register `StorageCluster`, mark active, deactivate prior.
 - **Org cap (~250 clusters):** when the current org is full, roll to the user's next `OrgKey`. If the user has no org with capacity, mark storage full and surface an in-app prompt: "Add another Atlas org to keep uploading."
 - Naming: `shard-<userSlug>-<orgIndex>-<n>` for project + cluster.
