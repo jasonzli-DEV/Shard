@@ -1,0 +1,28 @@
+/* Global styles — loaded after theme.css */
+
+.auth-loading {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Thin accent line at top of page — progress indicator analog */
+.auth-loading::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 40%;
+  background: var(--color-accent);
+  animation: loading-bar 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-bar {
+  0%   { left: -40%; width: 40%; }
+  60%  { left: 100%; width: 40%; }
+  100% { left: 100%; width: 0; }
+}

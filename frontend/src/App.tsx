@@ -1,12 +1,108 @@
-import React from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute, PublicOnlyRoute } from './routes';
+import client from './api/client';
+import './styles/theme.css';
 
-function App(): React.JSX.Element {
+const Login = lazy(() => import('./pages/Login'));
+const Drive = lazy(() => import('./pages/Drive'));
+const Setup = lazy(() => import('./pages/Setup'));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+    },
+  },
+});
+
+function PageFallback() {
+  return <div className="auth-loading" aria-label="Loading" />;
+}
+
+type SetupStatus = 'loading' | 'needed' | 'done';
+
+function AppRouter() {
+  const [setupStatus, setSetupStatus] = useState<SetupStatus>('loading');
+
+  useEffect(() => {
+    client
+      .get('/setup/status')
+      .then((res) => {
+        // If status endpoint returns configured:true, setup is done
+        const configured = res.data?.configured ?? false;
+        setSetupStatus(configured ? 'done' : 'needed');
+      })
+      .catch(() => {
+        // 404 means Phase 8 backend not yet present — treat as "needed"
+        // Any other error: default to done so users can reach login
+        setSetupStatus('needed');
+      });
+  }, []);
+
+  if (setupStatus === 'loading') {
+    return <div className="auth-loading" aria-label="Loading" />;
+  }
+
+  if (setupStatus === 'needed') {
+    return (
+      <Routes>
+        <Route path="/setup" element={<Suspense fallback={<PageFallback />}><Setup /></Suspense>} />
+        <Route path="*" element={<Navigate to="/setup" replace />} />
+      </Routes>
+    );
+  }
+
   return (
-    <div>
-      <h1>Shard</h1>
-      <p>Self-hosted cloud storage — setup in progress.</p>
-    </div>
+    <Routes>
+      {/* Public-only: redirect authenticated users to drive */}
+      <Route element={<PublicOnlyRoute />}>
+        <Route
+          path="/login"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Login />
+            </Suspense>
+          }
+        />
+      </Route>
+
+      {/* Protected: redirect unauthenticated users to login */}
+      <Route element={<ProtectedRoute />}>
+        <Route
+          path="/"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Drive />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/folder/:folderId"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Drive />
+            </Suspense>
+          }
+        />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRouter />
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
+  );
+}
