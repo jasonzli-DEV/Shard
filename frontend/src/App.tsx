@@ -14,6 +14,8 @@ const Starred = lazy(() => import('./pages/Starred'));
 const Search = lazy(() => import('./pages/Search'));
 const SharedWithMe = lazy(() => import('./pages/SharedWithMe'));
 const PublicFile = lazy(() => import('./pages/PublicFile'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -132,6 +134,22 @@ function AppRouter() {
           element={
             <Suspense fallback={<PageFallback />}>
               <SharedWithMe />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Dashboard />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Settings />
             </Suspense>
           }
         />
