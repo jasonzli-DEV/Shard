@@ -360,3 +360,62 @@ describe('deleteFileBytes', () => {
     await expect(deleteFileBytes(fileId)).resolves.not.toThrow();
   });
 });
+
+// ── I4: Spill fills active cluster before provisioning next ──────────────────
+
+describe('I4 — spill fills partially-used cluster before provisioning a new one', () => {
+  it('packs the remaining capacity of an active cluster before spilling to the next', async () => {
+    // cluster1 has 100 bytes free
+    const { clusterDoc: cluster1 } = await makeClusterForUser(TEST_USER_ID, USABLE_BYTES - 100);
+    const { clusterDoc: cluster2 } = await makeClusterForUser(TEST_USER_ID, 0);
+
+    const clusterSequence: typeof cluster1[] = [];
+    ensureCapacityMock = jest.fn().mockImplementation(async () => {
+      return clusterSequence.length === 0 ? cluster1 : cluster2;
+    });
+
+    // 200-byte file — cluster1 has only 100 bytes free, so it should be filled
+    // first (blob index 0 = 100 bytes on cluster1), then the rest goes to cluster2
+    // (blob index 1 = 100 bytes on cluster2).
+    const content = Buffer.alloc(200, 0xcc);
+
+    // Track which clusters ensureCapacity returns so we can assert call count
+    const capacityCalls: number[] = [];
+    ensureCapacityMock = jest.fn().mockImplementation(async (_uid: string, needed: number) => {
+      capacityCalls.push(needed);
+      if (capacityCalls.length === 1) return cluster1;
+      return cluster2;
+    });
+
+    const file = await storeFile({
+      userId: TEST_USER_ID,
+      parentId: null,
+      name: 'spill-fill.bin',
+      buffer: content,
+      mimeType: 'application/octet-stream',
+      encrypt: false,
+    });
+
+    expect(file).toBeTruthy();
+
+    const blobs = await BlobModel.find({ fileId: file!._id }).sort({ index: 1 });
+    // Must have produced exactly 2 blobs
+    expect(blobs).toHaveLength(2);
+
+    // Blob 0 should have consumed the 100-byte remainder of cluster1
+    expect(blobs[0].clusterId.toString()).toBe(cluster1._id.toString());
+    expect(blobs[0].size).toBe(100);
+
+    // Blob 1 carries the rest (100 bytes) on cluster2
+    expect(blobs[1].clusterId.toString()).toBe(cluster2._id.toString());
+    expect(blobs[1].size).toBe(100);
+
+    // ensureCapacity must have been called with 1 (not the full remaining size)
+    // so the active cluster is returned whenever it has ANY free space.
+    expect(capacityCalls[0]).toBe(1);
+
+    // Total content matches
+    const reassembled = await readFile(file!._id.toString());
+    expect(reassembled).toEqual(content);
+  });
+});
