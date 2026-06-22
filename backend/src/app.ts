@@ -10,6 +10,7 @@ import sharesRouter from './routes/shares';
 import publicLinksRouter from './routes/publicLinks';
 import v1Router from './routes/v1';
 import storageRouter from './routes/storage';
+import setupRouter from './routes/setup';
 import { requireAuth } from './middleware/auth';
 
 export function createApp(): Application {
@@ -46,6 +47,9 @@ export function createApp(): Application {
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok' });
   });
+
+  // Setup wizard — must be before auth routes (setup doesn't require auth)
+  app.use('/api/setup', setupRouter);
 
   app.use('/api/auth', authRouter);
   app.get('/api/me', requireAuth, meHandler);
