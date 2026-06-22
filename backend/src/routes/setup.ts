@@ -12,12 +12,15 @@ import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
+import { configurePassport } from '../auth/passport';
 
 const router = Router();
 
-// Allow tests to override the env file path via SETUP_ENV_FILE_PATH
+// Allow tests to override the env file path via SETUP_ENV_FILE_PATH.
+// Default: /app/config/.env — must match the volume mount in docker-compose.yml.
+// In development, set SETUP_ENV_FILE_PATH to an absolute writable path.
 function getEnvFilePath(): string {
-  return process.env.SETUP_ENV_FILE_PATH ?? path.join(process.cwd(), '..', '.env');
+  return process.env.SETUP_ENV_FILE_PATH ?? path.join(process.cwd(), 'config', '.env');
 }
 
 // ── Setup-complete logic ──────────────────────────────────────────────────────
@@ -212,6 +215,15 @@ router.post('/configure', async (req: Request, res: Response) => {
     process.env[key] = value;
   }
   logger.info('Setup: process.env updated, setup complete');
+
+  // Re-initialize passport strategies so OAuth login works immediately
+  // without requiring a server restart.
+  try {
+    configurePassport();
+    logger.info('Setup: passport strategies re-initialized');
+  } catch (err) {
+    logger.warn('Setup: passport re-init failed (non-fatal)', err);
+  }
 
   return res.json({
     success: true,

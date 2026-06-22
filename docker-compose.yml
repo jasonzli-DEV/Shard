@@ -6,13 +6,24 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    # Bootstrap: copy .env.example → .env on the host and fill in at minimum
+    # STARTER_MONGODB_URI + JWT_SECRET + one OAuth provider before running
+    # `docker compose up`.  The in-app setup wizard can write updated values to
+    # the config volume (see SETUP_ENV_FILE_PATH below); the container must be
+    # restarted afterwards for the new values to take effect.
     env_file: .env
     environment:
       NODE_ENV: production
+      # Where the setup wizard writes the .env file inside the container.
+      # Must be writable by the 'shard' user (UID from adduser in Dockerfile).
+      SETUP_ENV_FILE_PATH: /app/config/.env
     ports:
       - '4000:4000'
     volumes:
       - ./logs:/app/logs
+      # Writable config directory so the setup wizard can persist .env updates.
+      # The shard user owns /app (set in Dockerfile), so this mount is writable.
+      - ./config:/app/config
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:4000/api/health']
       interval: 30s
