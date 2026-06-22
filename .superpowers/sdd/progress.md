@@ -44,3 +44,4 @@ Phase 9 (integration + E2E + hardening): complete (commits 9a75004..e449998). Ba
 - e2e harness: playwright.config.ts, e2e/global-setup|teardown, e2e/flows.spec.ts (8 flows). Guarded POST /api/e2e/login (SHARD_E2E=1). scripts test:e2e, test:all.
 - 3 bugs fixed: /api/me name field; index.ts now also mongoose.connect(default) for mongoose.model() models; e2e cluster seed.
 - WART for final review: models split default vs named connection (both -> STARTER_URI). functional.
+Final review: 3C/5I/6M. FIXED all C+I + 2 Minor (commits 87d34f1..3b5ec71). Backend 316, Frontend 84, E2E 8 ALL GREEN. Deferred M1,M3,M5,M6 (low risk).
