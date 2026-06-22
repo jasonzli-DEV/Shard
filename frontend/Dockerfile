@@ -3,10 +3,12 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+# npm install (not ci): workspaces monorepo, lockfile is at the repo root.
+RUN npm install
 
 COPY tsconfig.json tsconfig.node.json vite.config.ts index.html ./
 COPY src ./src
+COPY public ./public
 
 RUN npm run build
 
