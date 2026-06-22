@@ -36,3 +36,11 @@ Phase 7b (frontend 7.6-7.8): complete (commits 11c3ae9..1cb10e1, 53 vitest, buil
 Phase 8 (setup wizard + branding): complete (commits c777040..5bef282). Backend 294 tests, frontend 84 tests, all green, both tsc clean, build OK.
 - /api/setup (status,test-connection,configure). Setup.tsx 4-step wizard. logo.svg/favicon.svg, README rewritten for Shard.
 FULL STACK GREEN as of this point.
+Task 9 (Phase 9 E2E spec): complete (commits 9a75004..e449998, review clean)
+- e2e/flows.spec.ts: 8 Playwright flows (auth redirect, login+drive, folder, upload, move, public link, trash/restore, dashboard)
+- Playwright: 8 passed. Backend: 310 passed. Frontend: 84 passed.
+- Bugs fixed: /api/me missing name field; mongoose default connection not established; E2E StorageCluster seeding for uploads.
+Phase 9 (integration + E2E + hardening): complete (commits 9a75004..e449998). Backend 310, Frontend 84, E2E 8 Playwright flows ALL GREEN.
+- e2e harness: playwright.config.ts, e2e/global-setup|teardown, e2e/flows.spec.ts (8 flows). Guarded POST /api/e2e/login (SHARD_E2E=1). scripts test:e2e, test:all.
+- 3 bugs fixed: /api/me name field; index.ts now also mongoose.connect(default) for mongoose.model() models; e2e cluster seed.
+- WART for final review: models split default vs named connection (both -> STARTER_URI). functional.
