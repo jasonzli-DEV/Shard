@@ -7,6 +7,7 @@ export interface IUser extends Document {
   displayName: string;
   avatarUrl?: string;
   role: 'admin' | 'user';
+  status: 'active' | 'pending';
   encryptionEnabled: boolean;
   encryptionKey?: string;
   createdAt: Date;
@@ -21,6 +22,7 @@ const UserSchema = new Schema<IUser>(
     displayName: { type: String, required: true },
     avatarUrl: { type: String },
     role: { type: String, enum: ['admin', 'user'], default: 'user' },
+    status: { type: String, enum: ['active', 'pending'], default: 'pending' },
     encryptionEnabled: { type: Boolean, default: false },
     encryptionKey: { type: String },
   },

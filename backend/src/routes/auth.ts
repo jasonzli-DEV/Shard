@@ -72,6 +72,7 @@ export async function meHandler(req: Request, res: Response): Promise<void> {
       displayName: user.displayName,
       avatarUrl: user.avatarUrl ?? null,
       role: user.role,
+      status: user.status,
       encryptionEnabled: user.encryptionEnabled,
     });
   } catch (err) {

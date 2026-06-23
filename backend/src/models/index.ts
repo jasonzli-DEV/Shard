@@ -8,3 +8,4 @@ export { SessionModel, type ISession } from './Session';
 export { ShareModel, type IShare, type SharePermission } from './Share';
 export { PublicLinkModel, type IPublicLink } from './PublicLink';
 export { ConfigModel, type IConfig } from './Config';
+export { InviteModel, type IInvite } from './Invite';

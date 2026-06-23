@@ -19,6 +19,7 @@ import {
   SessionModel,
   ShareModel,
   PublicLinkModel,
+  InviteModel,
 } from '../index';
 
 let mongod: MongoMemoryServer;
@@ -61,6 +62,40 @@ describe('User model', () => {
     });
     expect(user._id).toBeDefined();
     expect(user.role).toBe('user'); // default
+  });
+
+  it('defaults status to pending', async () => {
+    const user = await User.create({
+      provider: 'google',
+      providerId: 'g-status-001',
+      email: 'pending@example.com',
+      displayName: 'Pending User',
+    });
+    expect(user.status).toBe('pending');
+  });
+
+  it('can create a user with status active', async () => {
+    const user = await User.create({
+      provider: 'github',
+      providerId: 'gh-status-001',
+      email: 'active@example.com',
+      displayName: 'Active User',
+      status: 'active',
+    });
+    expect(user.status).toBe('active');
+  });
+
+  it('can change status from pending to active', async () => {
+    const user = await User.create({
+      provider: 'google',
+      providerId: 'g-status-002',
+      email: 'will-be-active@example.com',
+      displayName: 'Soon Active',
+    });
+    expect(user.status).toBe('pending');
+    await User.updateOne({ _id: user._id }, { status: 'active' });
+    const updated = await User.findById(user._id).lean();
+    expect(updated?.status).toBe('active');
   });
 
   it('enforces unique (provider, providerId)', async () => {
@@ -335,5 +370,48 @@ describe('PublicLink model', () => {
     await expect(
       PublicLink.create({ fileId, slug: 'dup-slug', createdBy: cb, expiresAt: exp })
     ).rejects.toThrow(/duplicate key/i);
+  });
+});
+
+// ── Invite ─────────────────────────────────────────────────────────────────────
+
+describe('Invite model', () => {
+  let Invite: mongoose.Model<mongoose.InferSchemaType<typeof InviteModel.schema>>;
+
+  beforeAll(async () => {
+    Invite = bound(InviteModel);
+    await Invite.createIndexes();
+  });
+
+  it('creates a valid invite', async () => {
+    const createdBy = new mongoose.Types.ObjectId();
+    const doc = await Invite.create({ email: 'invite@example.com', createdBy });
+    expect(doc._id).toBeDefined();
+    expect(doc.email).toBe('invite@example.com');
+    expect(doc.createdBy.toString()).toBe(createdBy.toString());
+  });
+
+  it('lowercases the email', async () => {
+    const createdBy = new mongoose.Types.ObjectId();
+    const doc = await Invite.create({ email: 'UPPER@EXAMPLE.COM', createdBy });
+    expect(doc.email).toBe('upper@example.com');
+  });
+
+  it('enforces unique email', async () => {
+    const cb = new mongoose.Types.ObjectId();
+    await Invite.create({ email: 'dup-invite@example.com', createdBy: cb });
+    await expect(
+      Invite.create({ email: 'dup-invite@example.com', createdBy: cb })
+    ).rejects.toThrow(/duplicate key/i);
+  });
+
+  it('can find and delete an invite by email', async () => {
+    const cb = new mongoose.Types.ObjectId();
+    await Invite.create({ email: 'findme@example.com', createdBy: cb });
+    const found = await Invite.findOne({ email: 'findme@example.com' }).lean();
+    expect(found).not.toBeNull();
+    await Invite.deleteOne({ email: 'findme@example.com' });
+    const gone = await Invite.findOne({ email: 'findme@example.com' }).lean();
+    expect(gone).toBeNull();
   });
 });
