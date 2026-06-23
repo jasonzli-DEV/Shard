@@ -1,11 +1,12 @@
 import jwt from 'jsonwebtoken';
+import { getConfig } from '../config/configService';
 
 const JWT_TTL = '7d';
 
 function getSecret(): string {
-  const secret = process.env.JWT_SECRET;
+  const secret = getConfig().jwtSecret || process.env.JWT_SECRET;
   if (!secret) {
-    throw new Error('JWT_SECRET environment variable is not set');
+    throw new Error('JWT secret is not configured (set JWT_SECRET env var or run setup)');
   }
   return secret;
 }

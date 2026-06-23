@@ -4,6 +4,7 @@ import { Strategy as GitHubStrategy } from 'passport-github2';
 import mongoose from 'mongoose';
 import { UserModel, type IUser } from '../models/User';
 import { getStarter } from '../lib/db';
+import { getConfig } from '../config/configService';
 
 export interface OAuthProfile {
   provider: 'google' | 'github';
@@ -87,11 +88,12 @@ export function configurePassport(): void {
   (passport as unknown as { _strategies: Record<string, unknown> })._strategies['github'] &&
     passport.unuse('github');
 
-  const PUBLIC_URL = process.env.PUBLIC_URL ?? 'http://localhost:4000';
+  const cfg = getConfig();
+  const PUBLIC_URL = cfg.publicUrl ?? process.env.PUBLIC_URL ?? 'http://localhost:4000';
 
   // Google
-  const googleClientId = process.env.GOOGLE_CLIENT_ID;
-  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const googleClientId = cfg.googleClientId;
+  const googleClientSecret = cfg.googleClientSecret;
   if (googleClientId && googleClientSecret) {
     passport.use(
       new GoogleStrategy(
@@ -123,8 +125,8 @@ export function configurePassport(): void {
   }
 
   // GitHub
-  const githubClientId = process.env.GITHUB_CLIENT_ID;
-  const githubClientSecret = process.env.GITHUB_CLIENT_SECRET;
+  const githubClientId = cfg.githubClientId;
+  const githubClientSecret = cfg.githubClientSecret;
   if (githubClientId && githubClientSecret) {
     passport.use(
       new GitHubStrategy(

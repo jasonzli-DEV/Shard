@@ -13,12 +13,14 @@ import storageRouter from './routes/storage';
 import setupRouter from './routes/setup';
 import { requireAuth } from './middleware/auth';
 import { e2eAuthRouter } from './routes/e2eAuth';
+import { getConfig } from './config/configService';
 
 export function createApp(): Application {
   const app = express();
 
   // ── Middleware ────────────────────────────────────────────────────────────
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? process.env.FRONTEND_URL ?? 'http://localhost:5173')
+  const cfg = getConfig();
+  const allowedOrigins = (cfg.allowedOrigins ?? process.env.ALLOWED_ORIGINS ?? process.env.FRONTEND_URL ?? 'http://localhost:5173')
     .split(',')
     .map((o) => o.trim());
 
