@@ -11,6 +11,7 @@
 import { createApp } from '../backend/src/app';
 import { connectRuntime } from '../backend/src/lib/runtime';
 import { loadConfig } from '../backend/src/config/configService';
+import { configurePassport } from '../backend/src/auth/passport';
 import { logger } from '../backend/src/utils/logger';
 
 // Mark as serverless so startStorageLoops() skips background intervals
@@ -27,6 +28,10 @@ async function initialize(): Promise<void> {
     try {
       await connectRuntime(starterUri);
       await loadConfig();
+      // createApp() configured passport before DB config was loaded (empty OAuth);
+      // re-run it now that loadConfig() has hydrated the DB config so the OAuth
+      // strategies are registered on every cold start.
+      configurePassport();
       initialized = true;
     } catch (err) {
       logger.error('Serverless init error', { error: (err as Error).message });
