@@ -14,7 +14,7 @@
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [
-    { "path": "/api/cron/storage-check", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/decommission", "schedule": "*/30 * * * *" }
+    { "path": "/api/cron/storage-check", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/decommission", "schedule": "0 4 * * *" }
   ]
 }
