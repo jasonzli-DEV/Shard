@@ -104,12 +104,44 @@ router.get('/storage', async (req: Request, res: Response) => {
     const totalUsedBytes = clusters.reduce((s, c) => s + c.storageUsedBytes, 0);
     const totalCapacityBytes = clusters.reduce((s, c) => s + c.storageCapacityBytes, 0);
 
+    // ── Starter cluster usage ─────────────────────────────────────────────────
+    const STARTER_CAPACITY_BYTES = parseInt(
+      process.env.STARTER_CAPACITY_BYTES ?? String(512 * 1024 * 1024),
+      10
+    );
+    const WARN_THRESHOLD = 0.8;
+
+    let starterUsedBytes = 0;
+    let starterNearCapacity = false;
+
+    try {
+      const conn = getConn();
+      const dbStats = await conn.db?.command({ dbStats: 1, scale: 1 });
+      if (dbStats) {
+        starterUsedBytes = dbStats.storageSize ?? dbStats.dataSize ?? 0;
+        starterNearCapacity =
+          STARTER_CAPACITY_BYTES > 0 &&
+          starterUsedBytes / STARTER_CAPACITY_BYTES >= WARN_THRESHOLD;
+      }
+    } catch {
+      // Non-fatal — usage is best-effort
+    }
+
     res.json({
       orgs: orgStats,
       totalUsedBytes,
       totalCapacityBytes,
       usedPercent:
         totalCapacityBytes > 0 ? Math.round((totalUsedBytes / totalCapacityBytes) * 100) : 0,
+      starter: {
+        usedBytes: starterUsedBytes,
+        capacityBytes: STARTER_CAPACITY_BYTES,
+        usedPercent:
+          STARTER_CAPACITY_BYTES > 0
+            ? Math.round((starterUsedBytes / STARTER_CAPACITY_BYTES) * 100)
+            : 0,
+        nearCapacity: starterNearCapacity,
+      },
     });
   } catch (err: any) {
     logger.error('GET /api/storage error', { error: err.message });

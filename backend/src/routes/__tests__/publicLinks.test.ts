@@ -85,22 +85,21 @@ describe('Public links routes', () => {
   beforeAll(async () => {
     app = createApp();
 
-    const owner = await upsertUserFromProfile({
-      provider: 'google',
-      id: 'pl-owner-001',
-      email: 'plowner@example.com',
-      displayName: 'PLOwner',
-    });
+    async function createActiveUser(id: string, email: string, displayName: string) {
+      const u = await upsertUserFromProfile({ provider: 'google', id, email, displayName });
+      const { UserModel: UM } = require('../../models/User');
+      let BU: any;
+      try { BU = conn.model(UM.modelName); } catch { BU = conn.model(UM.modelName, UM.schema); }
+      await BU.updateOne({ _id: u._id }, { status: 'active' });
+      return u;
+    }
+
+    const owner = await createActiveUser('pl-owner-001', 'plowner@example.com', 'PLOwner');
     ownerId = owner._id.toString();
     const ownerSession = await createSession(ownerId);
     ownerCookie = `shard_token=${ownerSession}`;
 
-    const other = await upsertUserFromProfile({
-      provider: 'google',
-      id: 'pl-other-001',
-      email: 'plother@example.com',
-      displayName: 'PLOther',
-    });
+    const other = await createActiveUser('pl-other-001', 'plother@example.com', 'PLOther');
     const otherSession = await createSession(other._id.toString());
     otherCookie = `shard_token=${otherSession}`;
   });

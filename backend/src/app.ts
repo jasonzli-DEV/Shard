@@ -11,9 +11,20 @@ import publicLinksRouter from './routes/publicLinks';
 import v1Router from './routes/v1';
 import storageRouter from './routes/storage';
 import setupRouter from './routes/setup';
+import adminRouter from './routes/admin';
+import cronRouter from './routes/cron';
 import { requireAuth } from './middleware/auth';
 import { e2eAuthRouter } from './routes/e2eAuth';
 import { getConfig } from './config/configService';
+import { logger } from './utils/logger';
+
+// Process-level error guards — log but never crash the server
+process.on('unhandledRejection', (reason: unknown) => {
+  logger.error('unhandledRejection', { reason: reason instanceof Error ? reason.message : String(reason) });
+});
+process.on('uncaughtException', (err: Error) => {
+  logger.error('uncaughtException', { error: err.message, stack: err.stack });
+});
 
 export function createApp(): Application {
   const app = express();
@@ -61,6 +72,8 @@ export function createApp(): Application {
 
   app.use('/api/auth', authRouter);
   app.get('/api/me', requireAuth, meHandler);
+  app.use('/api/admin', adminRouter);
+  app.use('/api/cron', cronRouter);
   app.use('/api/keys', apiKeysRouter);
   // publicLinksRouter must be mounted BEFORE filesRouter because filesRouter
   // applies requireAuth globally and would intercept /api/public/:slug requests.

@@ -1,36 +1,45 @@
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
 
-let starterConnection: mongoose.Connection | null = null;
+// Use globalThis cache for serverless warm invocations
+const g = globalThis as typeof globalThis & {
+  __shardStarterConn?: mongoose.Connection;
+};
 
 /**
  * Connect to the starter cluster (operator-managed metadata store).
  * Uses mongoose.createConnection so it is isolated from the default
  * mongoose connection (which is reserved for per-user clusters).
+ *
+ * The connection is cached on globalThis so serverless warm invocations
+ * reuse the same connection without reconnecting per request.
  */
 export async function connectStarter(uri: string): Promise<mongoose.Connection> {
-  if (starterConnection) {
-    return starterConnection;
+  if (g.__shardStarterConn && g.__shardStarterConn.readyState === 1) {
+    return g.__shardStarterConn;
   }
 
-  starterConnection = mongoose.createConnection(uri, {
+  const conn = mongoose.createConnection(uri, {
     serverSelectionTimeoutMS: 10_000,
     socketTimeoutMS: 45_000,
   });
 
-  await starterConnection.asPromise();
+  await conn.asPromise();
 
+  g.__shardStarterConn = conn;
   logger.info('Connected to starter MongoDB cluster');
 
-  starterConnection.on('error', (err: Error) => {
+  conn.on('error', (err: Error) => {
     logger.error('Starter connection error', { error: err.message });
   });
 
-  starterConnection.on('disconnected', () => {
+  conn.on('disconnected', () => {
     logger.warn('Starter connection disconnected');
+    // Clear cache so next call reconnects
+    g.__shardStarterConn = undefined;
   });
 
-  return starterConnection;
+  return conn;
 }
 
 /**
@@ -38,19 +47,19 @@ export async function connectStarter(uri: string): Promise<mongoose.Connection> 
  * Throws if connectStarter() has not been called yet.
  */
 export function getStarter(): mongoose.Connection {
-  if (!starterConnection) {
+  if (!g.__shardStarterConn) {
     throw new Error('Starter connection not initialised — call connectStarter() first');
   }
-  return starterConnection;
+  return g.__shardStarterConn;
 }
 
 /**
  * Close the starter connection (used in tests / graceful shutdown).
  */
 export async function closeStarter(): Promise<void> {
-  if (starterConnection) {
-    await starterConnection.close();
-    starterConnection = null;
+  if (g.__shardStarterConn) {
+    await g.__shardStarterConn.close();
+    g.__shardStarterConn = undefined;
     logger.info('Starter connection closed');
   }
 }

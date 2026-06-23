@@ -86,36 +86,30 @@ describe('Shares routes', () => {
   beforeAll(async () => {
     app = createApp();
 
+    async function createActiveUser(id: string, email: string, displayName: string) {
+      const u = await upsertUserFromProfile({ provider: 'google', id, email, displayName });
+      const { UserModel: UM } = require('../../models/User');
+      let BU: any;
+      try { BU = conn.model(UM.modelName); } catch { BU = conn.model(UM.modelName, UM.schema); }
+      await BU.updateOne({ _id: u._id }, { status: 'active' });
+      return u;
+    }
+
     // Owner user
-    const owner = await upsertUserFromProfile({
-      provider: 'google',
-      id: 'owner-001',
-      email: 'owner@example.com',
-      displayName: 'Owner',
-    });
+    const owner = await createActiveUser('owner-001', 'owner@example.com', 'Owner');
     ownerId = owner._id.toString();
     const ownerSession = await createSession(ownerId);
     ownerCookie = `shard_token=${ownerSession}`;
 
     // Recipient user
-    const recipient = await upsertUserFromProfile({
-      provider: 'google',
-      id: 'recipient-001',
-      email: 'recipient@example.com',
-      displayName: 'Recipient',
-    });
+    const recipient = await createActiveUser('recipient-001', 'recipient@example.com', 'Recipient');
     recipientId = recipient._id.toString();
     recipientEmail = recipient.email;
     const recipientSession = await createSession(recipientId);
     recipientCookie = `shard_token=${recipientSession}`;
 
     // Third user
-    const third = await upsertUserFromProfile({
-      provider: 'google',
-      id: 'third-001',
-      email: 'third@example.com',
-      displayName: 'Third',
-    });
+    const third = await createActiveUser('third-001', 'third@example.com', 'Third');
     thirdId = third._id.toString();
     const thirdSession = await createSession(thirdId);
     thirdCookie = `shard_token=${thirdSession}`;

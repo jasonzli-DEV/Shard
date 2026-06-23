@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { verifyJwt } from '../auth/jwt';
 import { getSessionUser } from '../auth/sessions';
 import { ApiKeyModel } from '../models/ApiKey';
+import { UserModel } from '../models/User';
 import { getStarter } from '../lib/db';
 
 // Allow tests to inject a specific connection
@@ -24,6 +25,25 @@ function getApiKeyModel(): mongoose.Model<mongoose.InferSchemaType<typeof ApiKey
   } catch {
     return conn.model(ApiKeyModel.modelName, ApiKeyModel.schema) as mongoose.Model<mongoose.InferSchemaType<typeof ApiKeyModel.schema>>;
   }
+}
+
+function getUserModel(): mongoose.Model<mongoose.InferSchemaType<typeof UserModel.schema>> {
+  const conn = getConn();
+  try {
+    return conn.model(UserModel.modelName) as mongoose.Model<mongoose.InferSchemaType<typeof UserModel.schema>>;
+  } catch {
+    return conn.model(UserModel.modelName, UserModel.schema) as mongoose.Model<mongoose.InferSchemaType<typeof UserModel.schema>>;
+  }
+}
+
+/**
+ * Routes that pending users can access even when their status is 'pending'.
+ * These are matched by exact path prefix.
+ */
+const PENDING_ALLOWED_PATHS = ['/api/me', '/api/auth/logout'];
+
+function isPendingAllowed(path: string): boolean {
+  return PENDING_ALLOWED_PATHS.some((p) => path === p || path.startsWith(p + '/'));
 }
 
 /**
@@ -49,7 +69,23 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       }
       // Update lastUsed async (fire and forget is acceptable, but we await for test reliability)
       await ApiKey.updateOne({ _id: keyDoc._id }, { lastUsed: new Date() });
-      (req as any).userId = keyDoc.userId.toString();
+      const apiKeyUserId = keyDoc.userId.toString();
+      (req as any).userId = apiKeyUserId;
+
+      // Check pending status for API key users too
+      if (!isPendingAllowed(req.path)) {
+        try {
+          const User = getUserModel();
+          const user = await User.findById(apiKeyUserId).lean().select('status');
+          if (user && (user as any).status === 'pending') {
+            res.status(403).json({ error: 'pending_approval' });
+            return;
+          }
+        } catch {
+          // If we can't check status, allow through
+        }
+      }
+
       next();
       return;
     }
@@ -73,6 +109,21 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       }
 
       (req as any).userId = userId;
+
+      // Check if user is pending — reject protected routes with 403
+      if (!isPendingAllowed(req.path)) {
+        try {
+          const User = getUserModel();
+          const user = await User.findById(userId).lean().select('status');
+          if (user && (user as any).status === 'pending') {
+            res.status(403).json({ error: 'pending_approval' });
+            return;
+          }
+        } catch {
+          // If we can't check status, allow through (DB may not be ready in tests)
+        }
+      }
+
       next();
       return;
     }

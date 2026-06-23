@@ -39,6 +39,7 @@ router.get('/status', (_req: Request, res: Response) => {
   res.json({
     setupRequired: !isConfigured(),
     configured: getConfiguredFlags(),
+    starterFromEnv: !!process.env.STARTER_MONGODB_URI,
   });
 });
 
@@ -100,8 +101,11 @@ router.post('/configure', async (req: Request, res: Response) => {
     });
   }
 
-  const { starterUri, google, github, publicUrl, allowedOrigins } =
+  const { starterUri: bodyStarterUri, google, github, publicUrl, allowedOrigins } =
     req.body as ConfigureBody;
+
+  // Use env var if already set (Vercel deploy), otherwise require from body
+  const starterUri = process.env.STARTER_MONGODB_URI || bodyStarterUri;
 
   // ── Validation ──────────────────────────────────────────────────────────────
   if (!starterUri || typeof starterUri !== 'string' || !starterUri.trim()) {

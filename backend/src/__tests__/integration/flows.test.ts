@@ -105,6 +105,17 @@ async function makeUser(id: string, displayName: string, email: string) {
     displayName,
     email,
   });
+  // Force status=active so integration tests bypass approval flow
+  const { UserModel } = require('../../models/User');
+  let BoundUser: any;
+  try {
+    BoundUser = conn.model(UserModel.modelName);
+  } catch {
+    BoundUser = conn.model(UserModel.modelName, UserModel.schema);
+  }
+  await BoundUser.updateOne({ _id: user._id }, { status: 'active' });
+  user.status = 'active';
+
   const token = await createSession(user._id.toString());
   return { user, cookie: `shard_token=${token}` };
 }

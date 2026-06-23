@@ -123,7 +123,8 @@ describe('Auth routes', () => {
       expect(res.body.email).toBe('me@example.com');
       expect(res.body.displayName).toBe('Me User');
       expect(res.body.provider).toBe('google');
-      expect(res.body.status).toBe('pending');
+      // First user ever is always active (admin + active rule)
+      expect(res.body.status).toBe('active');
     });
   });
 });

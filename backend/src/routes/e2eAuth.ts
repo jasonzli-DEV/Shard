@@ -20,8 +20,9 @@ import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { upsertUserFromProfile } from '../auth/passport';
 import { createSession } from '../auth/sessions';
-import { StorageClusterModel } from '../models';
+import { StorageClusterModel, UserModel } from '../models';
 import { openCluster } from '../storage/clusterManager';
+import { getStarter } from '../lib/db';
 import { logger } from '../utils/logger';
 
 const router = Router();
@@ -56,6 +57,19 @@ router.post('/login', async (req: Request, res: Response) => {
       displayName: displayName ?? email,
       email,
     });
+
+    // E2E users are always active (bypass approval flow)
+    if (user.status !== 'active') {
+      const conn = getStarter();
+      let BoundUser: typeof UserModel;
+      try {
+        BoundUser = conn.model(UserModel.modelName) as typeof UserModel;
+      } catch {
+        BoundUser = conn.model(UserModel.modelName, UserModel.schema) as typeof UserModel;
+      }
+      await BoundUser.updateOne({ _id: user._id }, { status: 'active' });
+      user.status = 'active';
+    }
 
     const token = await createSession(user._id.toString());
 

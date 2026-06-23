@@ -15,6 +15,7 @@ import * as fileService from '../services/files';
 import * as storageService from '../storage/storageService';
 import { canAccess } from '../services/shares';
 import { logger } from '../utils/logger';
+import { handleStarterWriteError } from '../utils/starterErrors';
 
 const router = Router();
 
@@ -93,6 +94,8 @@ router.post('/folders', async (req: Request, res: Response) => {
       res.status(409).json({ error: err.message });
     } else if (err.code === 'VALIDATION_ERROR') {
       res.status(400).json({ error: err.message });
+    } else if (handleStarterWriteError(err, res)) {
+      return;
     } else {
       logger.error('POST /api/folders error', { error: err.message });
       res.status(500).json({ error: 'Internal server error' });
@@ -150,6 +153,7 @@ router.post('/files', upload.single('file'), async (req: Request, res: Response)
 
     res.status(201).json(file);
   } catch (err: any) {
+    if (handleStarterWriteError(err, res)) return;
     logger.error('POST /api/files error', { error: err.message });
     res.status(500).json({ error: err.message || 'Internal server error' });
   }

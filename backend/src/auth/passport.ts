@@ -3,6 +3,7 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy } from 'passport-github2';
 import mongoose from 'mongoose';
 import { UserModel, type IUser } from '../models/User';
+import { InviteModel, type IInvite } from '../models/Invite';
 import { getStarter } from '../lib/db';
 import { getConfig } from '../config/configService';
 
@@ -35,6 +36,15 @@ function getUserModel(): mongoose.Model<IUser> {
   }
 }
 
+function getInviteModel(): mongoose.Model<IInvite> {
+  const conn = getConn();
+  try {
+    return conn.model<IInvite>(InviteModel.modelName);
+  } catch {
+    return conn.model<IInvite>(InviteModel.modelName, InviteModel.schema);
+  }
+}
+
 /**
  * Upsert a user from an OAuth profile.
  * The very first user created in the system gets role 'admin'.
@@ -59,7 +69,29 @@ export async function upsertUserFromProfile(profile: OAuthProfile): Promise<IUse
 
   // Determine role: admin if no users exist yet
   const userCount = await User.countDocuments();
-  const role: 'admin' | 'user' = userCount === 0 ? 'admin' : 'user';
+  const isFirstUser = userCount === 0;
+  const role: 'admin' | 'user' = isFirstUser ? 'admin' : 'user';
+
+  // Determine status: first user is active; check invites + accessMode for subsequent users
+  let status: 'active' | 'pending' = 'pending';
+  if (isFirstUser) {
+    status = 'active';
+  } else {
+    // Check if invited
+    const Invite = getInviteModel();
+    const invite = await Invite.findOne({ email: profile.email.toLowerCase() });
+    if (invite) {
+      status = 'active';
+      // Consume the invite
+      await Invite.deleteOne({ _id: invite._id });
+    } else {
+      // Check access mode
+      const cfg = getConfig();
+      if (cfg.accessMode === 'open') {
+        status = 'active';
+      }
+    }
+  }
 
   const user = await User.create({
     provider: profile.provider,
@@ -68,6 +100,7 @@ export async function upsertUserFromProfile(profile: OAuthProfile): Promise<IUse
     email: profile.email,
     avatarUrl: profile.avatarUrl,
     role,
+    status,
   });
 
   return user;

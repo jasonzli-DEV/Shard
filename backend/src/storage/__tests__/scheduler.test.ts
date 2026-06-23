@@ -21,7 +21,7 @@ import { StorageClusterModel } from '../../models';
 import { runStorageCheck, keepalive } from '../clusterManager';
 import { provisionNextCluster } from '../provisioner';
 import { decommissionEmptyClusters } from '../decommission';
-import { startStorageLoops, stopStorageLoops } from '../scheduler';
+import { startStorageLoops, stopStorageLoops, runStorageCheckAllUsers, runDecommissionSweep } from '../scheduler';
 
 const mockStorageClusterModel = StorageClusterModel as jest.Mocked<typeof StorageClusterModel>;
 const mockRunStorageCheck = runStorageCheck as jest.MockedFunction<typeof runStorageCheck>;
@@ -194,6 +194,56 @@ describe('scheduler', () => {
       await jest.advanceTimersByTimeAsync(60_000);
 
       expect(mockKeepalive).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('SERVERLESS gating', () => {
+    it('startStorageLoops does not start intervals when SERVERLESS=1', async () => {
+      const prev = process.env.SERVERLESS;
+      process.env.SERVERLESS = '1';
+      try {
+        mockKeepalive.mockResolvedValue(undefined);
+        const chain = { lean: jest.fn().mockResolvedValue([]) };
+        (mockStorageClusterModel.find as jest.Mock).mockReturnValue(chain);
+
+        startStorageLoops();
+        await jest.advanceTimersByTimeAsync(60_000);
+
+        expect(mockKeepalive).not.toHaveBeenCalled();
+      } finally {
+        if (prev === undefined) delete process.env.SERVERLESS;
+        else process.env.SERVERLESS = prev;
+      }
+    });
+  });
+
+  describe('exported maintenance functions', () => {
+    it('runStorageCheckAllUsers calls runStorageCheck for each user', async () => {
+      const userId = '507f1f77bcf86cd799439011';
+      const chain = {
+        lean: jest.fn().mockResolvedValue([
+          { userId: { toString: () => userId }, clusterId: 'c1', status: 'active' },
+        ]),
+      };
+      (mockStorageClusterModel.find as jest.Mock).mockReturnValue(chain);
+      mockRunStorageCheck.mockResolvedValue({ checked: false });
+
+      await runStorageCheckAllUsers();
+      expect(mockRunStorageCheck).toHaveBeenCalledWith(userId);
+    });
+
+    it('runDecommissionSweep calls decommissionEmptyClusters for each user', async () => {
+      const userId = '507f1f77bcf86cd799439011';
+      const chain = {
+        lean: jest.fn().mockResolvedValue([
+          { userId: { toString: () => userId }, clusterId: 'c1', status: 'full' },
+        ]),
+      };
+      (mockStorageClusterModel.find as jest.Mock).mockReturnValue(chain);
+      mockDecommissionEmptyClusters.mockResolvedValue(undefined);
+
+      await runDecommissionSweep();
+      expect(mockDecommissionEmptyClusters).toHaveBeenCalledWith(userId);
     });
   });
 });

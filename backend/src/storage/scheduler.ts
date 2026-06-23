@@ -11,7 +11,11 @@ let keepaliveInterval: ReturnType<typeof setInterval> | null = null;
 let storageCheckInterval: ReturnType<typeof setInterval> | null = null;
 let emptySweepInterval: ReturnType<typeof setInterval> | null = null;
 
-async function runStorageChecks(): Promise<void> {
+/**
+ * Run storage check + provisioning for all registered users.
+ * Exported for use by cron endpoints (Workstream B).
+ */
+export async function runStorageCheckAllUsers(): Promise<void> {
   // Find all unique userIds with clusters (any status)
   let clusters: Array<{ userId: { toString(): string }; clusterId: string; status: string }>;
   try {
@@ -40,7 +44,11 @@ async function runStorageChecks(): Promise<void> {
   }
 }
 
-async function runEmptySweep(): Promise<void> {
+/**
+ * Run decommission sweep across all users.
+ * Exported for use by cron endpoints (Workstream B).
+ */
+export async function runDecommissionSweep(): Promise<void> {
   // Find all unique userIds with any cluster
   let clusters: Array<{ userId: { toString(): string } }>;
   try {
@@ -60,7 +68,17 @@ async function runEmptySweep(): Promise<void> {
   }
 }
 
+/**
+ * Start background storage loops.
+ * Only runs when SERVERLESS !== '1' (i.e., not on Vercel).
+ */
 export function startStorageLoops(): void {
+  // Gate: do not start loops in serverless environments
+  if (process.env.SERVERLESS === '1') {
+    console.log('[Scheduler] Serverless mode — background loops disabled (use cron endpoints)');
+    return;
+  }
+
   if (keepaliveInterval || storageCheckInterval || emptySweepInterval) {
     // Already running
     return;
@@ -73,13 +91,13 @@ export function startStorageLoops(): void {
   }, KEEPALIVE_MS);
 
   storageCheckInterval = setInterval(() => {
-    runStorageChecks().catch((err: Error) =>
+    runStorageCheckAllUsers().catch((err: Error) =>
       console.error('[Scheduler] Storage check loop failed:', err),
     );
   }, STORAGE_CHECK_MS);
 
   emptySweepInterval = setInterval(() => {
-    runEmptySweep().catch((err: Error) =>
+    runDecommissionSweep().catch((err: Error) =>
       console.error('[Scheduler] Empty sweep loop failed:', err),
     );
   }, EMPTY_SWEEP_MS);

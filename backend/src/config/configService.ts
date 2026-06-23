@@ -11,6 +11,7 @@ export interface AppConfig {
   publicUrl?: string;
   allowedOrigins?: string;
   jwtSecret: string;
+  accessMode: 'open' | 'approval';
 }
 
 // Module-level cache — populated by loadConfig(), refreshed by saveConfig().
@@ -67,6 +68,11 @@ export function getConfig(): AppConfig {
   const jwtSecret =
     c.jwtSecret || process.env.JWT_SECRET || '';
 
+  const envAccessMode = process.env.ACCESS_MODE;
+  const resolvedEnvAccessMode: 'open' | 'approval' =
+    envAccessMode === 'open' || envAccessMode === 'approval' ? envAccessMode : 'approval';
+  const accessMode: 'open' | 'approval' = (c.accessMode ?? resolvedEnvAccessMode);
+
   return {
     googleClientId,
     googleClientSecret,
@@ -75,6 +81,7 @@ export function getConfig(): AppConfig {
     publicUrl,
     allowedOrigins,
     jwtSecret,
+    accessMode,
   };
 }
 
@@ -106,6 +113,7 @@ export async function saveConfig(
         publicUrl: merged.publicUrl,
         allowedOrigins: merged.allowedOrigins,
         jwtSecret: merged.jwtSecret,
+        accessMode: merged.accessMode ?? 'approval',
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -147,5 +155,6 @@ function docToCache(doc: IConfig): Partial<AppConfig> {
     publicUrl: doc.publicUrl,
     allowedOrigins: doc.allowedOrigins,
     jwtSecret: doc.jwtSecret,
+    accessMode: doc.accessMode ?? 'approval',
   };
 }
