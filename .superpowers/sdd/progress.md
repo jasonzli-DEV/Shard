@@ -63,3 +63,6 @@ v2 Phase A (config-in-DB): DONE (commits 2280f79..7f1ec7e, 331 tests). Config si
 Pi hotfix: chmod 777 ~/shard/config (unblocked old build's EACCES).
 NEXT order per user: C access-control -> B vercel(+push+deploy) -> D resilience.
 Phase C base: 3a80ce4
+v2 C/D/B (access toggle + resilience + vercel): DONE (commits b6f8c6c..HEAD). Backend 367, Frontend 86, E2E 8 green. accessMode toggle; pending-approval; admin routes/UI; starter resilience (507 not crash); serverless api/index.ts + vercel.json (rewrites+crons); synchronous provisioning kept (<10s).
+PUSHED to github.com/jasonzli-DEV/Shard (main).
+Vercel deploy BLOCKED: CLI token expired (vercel whoami fails). User must re-auth or import repo on dashboard + set STARTER_MONGODB_URI env.
