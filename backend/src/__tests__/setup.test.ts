@@ -128,6 +128,13 @@ const validPayload = {
 
 describe('POST /api/setup/configure', () => {
   it('returns 400 when starterUri is missing', async () => {
+    // Guard against cross-suite env leakage: a leaked STARTER_MONGODB_URI (+OAuth)
+    // would make isConfigured() true and yield 403 instead of the 400 under test.
+    delete process.env.STARTER_MONGODB_URI;
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+    delete process.env.GITHUB_CLIENT_ID;
+    delete process.env.GITHUB_CLIENT_SECRET;
     const app = createApp();
     const res = await request(app)
       .post('/api/setup/configure')
