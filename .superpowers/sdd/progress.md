@@ -53,3 +53,9 @@ PROJECT COMPLETE.
 === v2 work started ===
 v2 plan: docs/superpowers/plans/2026-06-22-shard-v2.md. Order A(config-in-db)->C(access)->D(resilience)->B(vercel)->redeploy.
 Live fixes shipped: setup routing (setupRequired), live connectRuntime on configure (no restart), login copy. Backend 316, Frontend 84+2 regression.
+
+=== v2 Phase A (Config in DB) ===
+Base commit: 77b6ceeb82477849d808659b0826eb7131d3154a
+Plan: docs/superpowers/plans/2026-06-22-shard-v2-phase-a.md
+Tasks: 1(Config model), 2(configService), 3(consumers), 4(setup.ts), 5(index+compose), 6(report)
+Task 1 (Config model + index export): complete (commits 77b6cee..2280f79, review clean, +2 tests → 318 total)
