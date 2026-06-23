@@ -37,6 +37,8 @@ const mockConfigure = vi.fn();
 vi.mock('../api/setup', () => ({
   testConnection: (...args: unknown[]) => mockTestConnection(...args),
   configure: (...args: unknown[]) => mockConfigure(...args),
+  // Return starterFromEnv=false by default so wizard shows all steps
+  getSetupStatus: vi.fn().mockResolvedValue({ starterFromEnv: false, setupRequired: true, configured: {} }),
 }));
 
 import Setup from '../pages/Setup';

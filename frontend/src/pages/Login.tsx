@@ -36,7 +36,7 @@ export default function Login() {
           <header className="login-form-header">
             <h2 className="login-form-title">Sign in</h2>
             <p className="login-form-sub">
-              Welcome back. Sign in to access your files.
+              Sign in to access your files. New accounts require admin approval.
             </p>
           </header>
 

@@ -12,10 +12,22 @@ import {
   deleteApiKey,
 } from '../api/storage';
 import type { OrgKey, ApiKeyItem } from '../api/storage';
+import {
+  listUsers,
+  approveUser,
+  denyUser,
+  setUserRole,
+  getAccessMode,
+  setAccessMode,
+  listInvites,
+  createInvite,
+  deleteInvite,
+} from '../api/admin';
+import type { AdminUser, Invite } from '../api/admin';
 import './Settings.css';
 import './Drive.css';
 
-type Category = 'orgs' | 'keys' | 'account';
+type Category = 'orgs' | 'keys' | 'account' | 'admin';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -375,10 +387,262 @@ function AccountSection() {
   );
 }
 
+// ── Admin section ─────────────────────────────────────────────────────────────
+
+function AdminSection() {
+  const qc = useQueryClient();
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteError, setInviteError] = useState('');
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['admin-users'],
+    queryFn: listUsers,
+  });
+
+  const { data: accessModeData, isLoading: accessModeLoading } = useQuery({
+    queryKey: ['access-mode'],
+    queryFn: getAccessMode,
+  });
+
+  const { data: invites = [] } = useQuery({
+    queryKey: ['admin-invites'],
+    queryFn: listInvites,
+  });
+
+  const accessModeMutation = useMutation({
+    mutationFn: (mode: 'open' | 'approval') => setAccessMode(mode),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['access-mode'] }),
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: approveUser,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+  });
+
+  const denyMutation = useMutation({
+    mutationFn: denyUser,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+  });
+
+  const roleMutation = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: 'admin' | 'user' }) => setUserRole(id, role),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: createInvite,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-invites'] });
+      setInviteEmail('');
+      setInviteError('');
+    },
+    onError: (e: Error) => setInviteError(e.message),
+  });
+
+  const deleteInviteMutation = useMutation({
+    mutationFn: deleteInvite,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-invites'] }),
+  });
+
+  const currentMode = accessModeData?.accessMode ?? 'approval';
+
+  function handleInviteSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setInviteError('');
+    if (!inviteEmail.trim()) { setInviteError('Email is required.'); return; }
+    inviteMutation.mutate(inviteEmail.trim());
+  }
+
+  return (
+    <div>
+      <h2 className="settings-section-title">Access Control</h2>
+
+      {/* Access mode toggle */}
+      <div className="settings-admin-card" style={{ marginBottom: 'var(--space-6)' }}>
+        <div className="settings-admin-row">
+          <div>
+            <div className="settings-admin-label">Access mode</div>
+            <div className="settings-admin-desc">
+              {currentMode === 'open'
+                ? 'Open — anyone who signs in gets immediate access.'
+                : 'Approval — new users wait for an admin to approve them.'}
+            </div>
+          </div>
+          <div className="settings-admin-toggle-wrap">
+            <button
+              className={`settings-toggle-btn ${currentMode === 'open' ? 'active' : ''}`}
+              onClick={() => accessModeMutation.mutate('open')}
+              disabled={accessModeLoading || accessModeMutation.isPending || currentMode === 'open'}
+              type="button"
+            >
+              Open
+            </button>
+            <button
+              className={`settings-toggle-btn ${currentMode === 'approval' ? 'active' : ''}`}
+              onClick={() => accessModeMutation.mutate('approval')}
+              disabled={accessModeLoading || accessModeMutation.isPending || currentMode === 'approval'}
+              type="button"
+            >
+              Approval
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Users table */}
+      <h2 className="settings-section-title">Users</h2>
+      <div className="settings-table-wrap" style={{ marginBottom: 'var(--space-6)' }}>
+        <table className="settings-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Name</th>
+              <th>Provider</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: 'var(--space-5)' }}>
+                  No users found.
+                </td>
+              </tr>
+            )}
+            {users.map((u: AdminUser) => (
+              <tr key={u.id}>
+                <td className="settings-mono" style={{ fontSize: 'var(--text-sm)' }}>{u.email}</td>
+                <td>{u.name}</td>
+                <td style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)' }}>{u.provider}</td>
+                <td>
+                  <span className={u.role === 'admin' ? 'badge-role-admin' : 'badge-role-user'}>
+                    {u.role}
+                  </span>
+                </td>
+                <td>
+                  <span className={u.status === 'active' ? 'badge-status-active' : 'badge-status-pending'}>
+                    {u.status}
+                  </span>
+                </td>
+                <td style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                  {u.status === 'pending' && (
+                    <button
+                      className="btn-primary"
+                      style={{ fontSize: 'var(--text-xs)', padding: '2px 8px' }}
+                      onClick={() => approveMutation.mutate(u.id)}
+                      disabled={approveMutation.isPending}
+                      type="button"
+                    >
+                      Approve
+                    </button>
+                  )}
+                  <button
+                    className="btn-danger"
+                    style={{ fontSize: 'var(--text-xs)', padding: '2px 8px' }}
+                    onClick={() => denyMutation.mutate(u.id)}
+                    disabled={denyMutation.isPending}
+                    type="button"
+                  >
+                    Deny
+                  </button>
+                  {u.role === 'user' ? (
+                    <button
+                      className="btn-secondary"
+                      style={{ fontSize: 'var(--text-xs)', padding: '2px 8px' }}
+                      onClick={() => roleMutation.mutate({ id: u.id, role: 'admin' })}
+                      disabled={roleMutation.isPending}
+                      type="button"
+                    >
+                      Make admin
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-secondary"
+                      style={{ fontSize: 'var(--text-xs)', padding: '2px 8px' }}
+                      onClick={() => roleMutation.mutate({ id: u.id, role: 'user' })}
+                      disabled={roleMutation.isPending}
+                      type="button"
+                    >
+                      Demote
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Invites */}
+      <h2 className="settings-section-title">Invites</h2>
+      <div className="settings-table-wrap" style={{ marginBottom: 'var(--space-4)' }}>
+        <table className="settings-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {invites.length === 0 && (
+              <tr>
+                <td colSpan={3} style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: 'var(--space-4)' }}>
+                  No pending invites.
+                </td>
+              </tr>
+            )}
+            {invites.map((inv: Invite) => (
+              <tr key={inv.id}>
+                <td className="settings-mono">{inv.email}</td>
+                <td style={{ color: 'var(--color-text-muted)' }}>
+                  {new Date(inv.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                </td>
+                <td>
+                  <button
+                    className="btn-danger"
+                    onClick={() => deleteInviteMutation.mutate(inv.id)}
+                    disabled={deleteInviteMutation.isPending}
+                    type="button"
+                  >
+                    Revoke
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <form className="settings-form" onSubmit={handleInviteSubmit}>
+        <div className="settings-form-title">Invite by email</div>
+        <div className="settings-field">
+          <label className="settings-label" htmlFor="invite-email">Email address</label>
+          <input
+            id="invite-email"
+            className="settings-input"
+            type="email"
+            placeholder="user@example.com"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+          />
+        </div>
+        {inviteError && <div className="settings-error">{inviteError}</div>}
+        <button className="btn-primary" type="submit" disabled={inviteMutation.isPending}>
+          {inviteMutation.isPending ? 'Sending…' : 'Send invite'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [category, setCategory] = useState<Category>('orgs');
 
   function handleNavigate(section: string) {
@@ -412,6 +676,7 @@ export default function Settings() {
                   ['orgs', 'Atlas Orgs'],
                   ['keys', 'API Keys'],
                   ['account', 'Account'],
+                  ...(user?.role === 'admin' ? [['admin', 'Admin'] as [Category, string]] : []),
                 ] as [Category, string][]).map(([id, label]) => (
                   <li key={id}>
                     <button
@@ -432,6 +697,7 @@ export default function Settings() {
               {category === 'orgs' && <AtlasOrgsSection />}
               {category === 'keys' && <ApiKeysSection />}
               {category === 'account' && <AccountSection />}
+              {category === 'admin' && user?.role === 'admin' && <AdminSection />}
             </div>
           </div>
         </div>

@@ -1,0 +1,42 @@
+.pending-icon {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: var(--space-2);
+}
+
+.pending-email {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.pending-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-top: var(--space-6);
+}
+
+.pending-note {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+  background: var(--color-warning-dim);
+  border: 1px solid rgba(224, 166, 82, 0.25);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.pending-signout-btn {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  text-decoration: none;
+  justify-content: center;
+}
+
+.pending-signout-btn:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}

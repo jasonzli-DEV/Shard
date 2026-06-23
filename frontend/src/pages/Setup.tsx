@@ -11,12 +11,12 @@
  *   3. Site config      — Public URL + allowed origins
  *   4. Finish           — calls configure, redirects to /login
  */
-import { useState, useId } from 'react';
+import { useState, useId, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ShardMark from '../components/ShardMark';
 import Stepper, { StepDef } from '../components/setup/Stepper';
 import Step from '../components/setup/Step';
-import { testConnection, configure, ConfigurePayload } from '../api/setup';
+import { testConnection, configure, ConfigurePayload, getSetupStatus } from '../api/setup';
 import '../styles/theme.css';
 import './Setup.css';
 
@@ -118,9 +118,25 @@ const initialState: WizardState = {
 
 export default function Setup() {
   const navigate = useNavigate();
-  const [step, setStep] = useState(0); // 0-indexed
+  const [starterFromEnv, setStarterFromEnv] = useState(false);
+  // When starterFromEnv=true, start at step 1 (skip starter cluster step)
+  const [step, setStep] = useState(0); // 0-indexed (0=starter, 1=oauth, 2=site, 3=finish)
   const [state, setState] = useState<WizardState>(initialState);
   const uid = useId();
+
+  // Fetch setup status to check if starterFromEnv
+  useEffect(() => {
+    getSetupStatus()
+      .then((status) => {
+        if (status.starterFromEnv) {
+          setStarterFromEnv(true);
+          setStep(1); // skip starter step
+        }
+      })
+      .catch(() => {
+        // Non-fatal — proceed with normal flow
+      });
+  }, []);
 
   function update<K extends keyof WizardState>(key: K, value: WizardState[K]) {
     setState((prev) => ({ ...prev, [key]: value }));
@@ -176,10 +192,13 @@ export default function Setup() {
     update('submitting', true);
     update('submitError', null);
     const payload: ConfigurePayload = {
-      starterUri: state.starterUri.trim(),
       publicUrl: state.publicUrl.trim(),
       allowedOrigins: state.allowedOrigins.trim(),
     };
+    // Only include starterUri if not already provided via env
+    if (!starterFromEnv && state.starterUri.trim()) {
+      payload.starterUri = state.starterUri.trim();
+    }
     if (state.googleEnabled) {
       payload.google = {
         clientId: state.googleClientId.trim(),
@@ -222,7 +241,7 @@ export default function Setup() {
             <p>Takes about two minutes.</p>
           </div>
 
-          <Stepper steps={STEPS} current={step} />
+          <Stepper steps={starterFromEnv ? STEPS.slice(1) : STEPS} current={starterFromEnv ? step - 1 : step} />
         </div>
         {/* Decorative facet background (matches Login left panel) */}
         <div className="setup-rail-facet" aria-hidden="true" />
@@ -313,12 +332,14 @@ export default function Setup() {
               description="Shard uses OAuth — you don't store passwords. Enable at least one provider. Users who sign in first become admins automatically."
               actions={
                 <>
-                  <button
-                    className="setup-btn setup-btn--ghost"
-                    onClick={() => setStep(0)}
-                  >
-                    ← Back
-                  </button>
+                  {!starterFromEnv && (
+                    <button
+                      className="setup-btn setup-btn--ghost"
+                      onClick={() => setStep(0)}
+                    >
+                      ← Back
+                    </button>
+                  )}
                   <button
                     className="setup-btn setup-btn--primary"
                     disabled={!step2Valid()}

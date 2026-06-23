@@ -13,18 +13,21 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 /**
  * Redirects unauthenticated visitors to /login.
+ * Redirects pending users to /pending.
  * Redirects authenticated visitors away from /login to /.
  */
 export function ProtectedRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isPending } = useAuth();
   if (isLoading) return <div className="auth-loading" aria-label="Loading" />;
+  if (isPending) return <Navigate to="/pending" replace />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <Outlet />;
 }
 
 export function PublicOnlyRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isPending } = useAuth();
   if (isLoading) return <div className="auth-loading" aria-label="Loading" />;
+  if (isPending) return <Navigate to="/pending" replace />;
   if (isAuthenticated) return <Navigate to="/" replace />;
   return <Outlet />;
 }

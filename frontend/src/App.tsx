@@ -16,6 +16,7 @@ const SharedWithMe = lazy(() => import('./pages/SharedWithMe'));
 const PublicFile = lazy(() => import('./pages/PublicFile'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Settings = lazy(() => import('./pages/Settings'));
+const PendingApproval = lazy(() => import('./pages/PendingApproval'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -77,6 +78,16 @@ function AppRouter() {
           }
         />
       </Route>
+
+      {/* Pending approval — accessible without full auth */}
+      <Route
+        path="/pending"
+        element={
+          <Suspense fallback={<PageFallback />}>
+            <PendingApproval />
+          </Suspense>
+        }
+      />
 
       {/* Public file access — no auth required */}
       <Route

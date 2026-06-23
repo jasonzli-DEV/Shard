@@ -13,12 +13,14 @@ export interface AuthUser {
   email: string;
   avatarUrl?: string;
   role: 'admin' | 'user';
+  status: 'active' | 'pending';
   encryptionEnabled: boolean;
 }
 
 type AuthState =
   | { status: 'loading' }
   | { status: 'authenticated'; user: AuthUser }
+  | { status: 'pending'; user: AuthUser }
   | { status: 'unauthenticated' };
 
 interface AuthContextValue {
@@ -26,6 +28,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isPending: boolean;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -38,7 +41,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchUser = useCallback(async () => {
     try {
       const { data } = await client.get<AuthUser>('/me');
-      setState({ status: 'authenticated', user: data });
+      if (data.status === 'pending') {
+        setState({ status: 'pending', user: data });
+      } else {
+        setState({ status: 'authenticated', user: data });
+      }
     } catch {
       setState({ status: 'unauthenticated' });
     }
@@ -55,11 +62,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isLoading = state.status === 'loading';
   const isAuthenticated = state.status === 'authenticated';
-  const user = state.status === 'authenticated' ? state.user : null;
+  const isPending = state.status === 'pending';
+  const user = (state.status === 'authenticated' || state.status === 'pending') ? state.user : null;
 
   return (
     <AuthContext.Provider
-      value={{ state, user, isLoading, isAuthenticated, logout, refresh: fetchUser }}
+      value={{ state, user, isLoading, isAuthenticated, isPending, logout, refresh: fetchUser }}
     >
       {children}
     </AuthContext.Provider>

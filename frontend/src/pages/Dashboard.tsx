@@ -1,6 +1,7 @@
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import Sidebar from '../components/Sidebar';
+import { useAuth } from '../context/AuthContext';
 import { getStorage } from '../api/storage';
 import type { ClusterInfo } from '../api/storage';
 import './Dashboard.css';
@@ -73,6 +74,8 @@ function ClusterBadge({ status }: { status: ClusterInfo['status'] }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['storage'],
@@ -115,6 +118,31 @@ export default function Dashboard() {
 
           {data && !isLoading && (
             <>
+              {/* Admin warning banner when starter cluster near capacity */}
+              {isAdmin && data.starter?.nearCapacity && (
+                <div className="dashboard-starter-warning">
+                  <span className="dashboard-starter-warning-icon" aria-hidden="true">⚠</span>
+                  <span>
+                    Metadata store is near capacity ({data.starter.usedPercent}% of{' '}
+                    {formatBytes(data.starter.capacityBytes)} used).{' '}
+                    Consider upgrading the starter cluster.
+                  </span>
+                </div>
+              )}
+
+              {/* Starter cluster usage bar (admin only) */}
+              {isAdmin && data.starter && (
+                <div className="dashboard-starter-card">
+                  <div className="dashboard-starter-header">
+                    <span className="dashboard-starter-label">Metadata cluster (starter)</span>
+                    <span className="dashboard-starter-bytes">
+                      {formatBytes(data.starter.usedBytes)} / {formatBytes(data.starter.capacityBytes)}
+                    </span>
+                  </div>
+                  <StorageBar percent={data.starter.usedPercent} />
+                </div>
+              )}
+
               {/* Overall summary */}
               <div className="dashboard-summary">
                 <div className="dashboard-summary-crystal">

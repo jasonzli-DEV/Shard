@@ -27,6 +27,7 @@ vi.mock('../context/AuthContext', () => ({
 vi.mock('../api/setup', () => ({
   testConnection: vi.fn(),
   configure: vi.fn(),
+  getSetupStatus: vi.fn().mockResolvedValue({ starterFromEnv: false, setupRequired: true, configured: {} }),
 }));
 
 // ── Sidebar branding ──────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import client from './client';
 
 export interface SetupStatus {
   setupRequired: boolean;
+  starterFromEnv: boolean;
   configured: {
     starterDb: boolean;
     jwt: boolean;
@@ -20,7 +21,7 @@ export interface OAuthCreds {
 }
 
 export interface ConfigurePayload {
-  starterUri: string;
+  starterUri?: string;
   google?: OAuthCreds;
   github?: OAuthCreds;
   publicUrl: string;
@@ -30,6 +31,10 @@ export interface ConfigurePayload {
 export async function fetchSetupStatus(): Promise<SetupStatus> {
   const res = await client.get<SetupStatus>('/setup/status');
   return res.data;
+}
+
+export async function getSetupStatus(): Promise<SetupStatus> {
+  return fetchSetupStatus();
 }
 
 export async function testConnection(

@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/dist",
+  "env": {
+    "SERVERLESS": "1"
+  },
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "backend/src/**"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/dist/$1"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/storage-check",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/decommission",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

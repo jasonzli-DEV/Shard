@@ -30,11 +30,19 @@ export interface OrgStorage {
   totalCapacityBytes: number;
 }
 
+export interface StarterUsage {
+  usedBytes: number;
+  capacityBytes: number;
+  usedPercent: number;
+  nearCapacity: boolean;
+}
+
 export interface StorageResponse {
   orgs: OrgStorage[];
   totalUsedBytes: number;
   totalCapacityBytes: number;
   usedPercent: number;
+  starter?: StarterUsage;
 }
 
 // ── Org key types ─────────────────────────────────────────────────────────────

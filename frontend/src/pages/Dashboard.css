@@ -258,3 +258,52 @@
   color: var(--color-text-muted);
   margin-bottom: var(--space-1);
 }
+
+/* ── Starter cluster card (admin) ────────────────────────────────────────────── */
+
+.dashboard-starter-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.dashboard-starter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-2);
+}
+
+.dashboard-starter-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+
+.dashboard-starter-bytes {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── Admin near-capacity warning banner ───────────────────────────────────────── */
+
+.dashboard-starter-warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--color-warning-dim);
+  border: 1px solid rgba(224, 166, 82, 0.35);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-warning);
+  margin-bottom: var(--space-4);
+}
+
+.dashboard-starter-warning-icon {
+  font-size: var(--text-base);
+  flex-shrink: 0;
+}
