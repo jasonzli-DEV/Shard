@@ -9,6 +9,7 @@ export interface IConfig extends Document {
   publicUrl?: string;
   allowedOrigins?: string;
   jwtSecret: string;
+  accessMode?: 'open' | 'approval';
   updatedAt: Date;
 }
 
@@ -22,6 +23,7 @@ const ConfigSchema = new Schema<IConfig>(
     publicUrl: { type: String },
     allowedOrigins: { type: String },
     jwtSecret: { type: String, required: true },
+    accessMode: { type: String, enum: ['open', 'approval'], default: 'approval' },
   },
   { timestamps: true }
 );

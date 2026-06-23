@@ -62,3 +62,4 @@ Task 1 (Config model + index export): complete (commits 77b6cee..2280f79, review
 v2 Phase A (config-in-DB): DONE (commits 2280f79..7f1ec7e, 331 tests). Config singleton in starter DB; getConfig() w/ env fallback; setup /configure saves to DB (no .env write — fixes EACCES). STARTER_MONGODB_URI is the only required env var.
 Pi hotfix: chmod 777 ~/shard/config (unblocked old build's EACCES).
 NEXT order per user: C access-control -> B vercel(+push+deploy) -> D resilience.
+Phase C base: 3a80ce4

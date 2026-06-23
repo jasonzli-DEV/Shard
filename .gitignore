@@ -3,3 +3,9 @@ dist/
 .env
 *.log
 .DS_Store
+
+# generated test artifacts
+e2e/report/
+test-results/
+playwright-report/
+.vercel/
