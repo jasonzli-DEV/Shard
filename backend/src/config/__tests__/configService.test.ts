@@ -33,7 +33,7 @@ afterAll(async () => {
   await mongod.stop();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetConfigCache();
   // Clear relevant env vars
   [
@@ -42,6 +42,14 @@ beforeEach(() => {
     'PUBLIC_URL', 'ALLOWED_ORIGINS', 'JWT_SECRET',
     'STARTER_MONGODB_URI',
   ].forEach((k) => delete process.env[k]);
+  // Drop the Config collection so each test starts with a clean DB state.
+  // Using dropCollection (not deleteMany) avoids stale index state.
+  if (conn.db) {
+    const collections = await conn.db.listCollections({ name: 'configs' }).toArray();
+    if (collections.length > 0) {
+      await conn.db.dropCollection('configs');
+    }
+  }
 });
 
 describe('loadConfig', () => {
