@@ -66,3 +66,7 @@ Phase C base: 3a80ce4
 v2 C/D/B (access toggle + resilience + vercel): DONE (commits b6f8c6c..HEAD). Backend 367, Frontend 86, E2E 8 green. accessMode toggle; pending-approval; admin routes/UI; starter resilience (507 not crash); serverless api/index.ts + vercel.json (rewrites+crons); synchronous provisioning kept (<10s).
 PUSHED to github.com/jasonzli-DEV/Shard (main).
 Vercel deploy BLOCKED: CLI token expired (vercel whoami fails). User must re-auth or import repo on dashboard + set STARTER_MONGODB_URI env.
+Chunked upload (Phase): complete (commits d1b99b5..c491ec2, backend 383 tests, frontend 88 tests, tsc clean, build OK)
+- readFile: now decrypts per-blob (bug fix — was trying to decrypt combined buffer)
+- storeChunk/abortUpload added to storageService; 4 new routes in files.ts
+- Frontend: uploadFileChunked in api/files.ts; useUpload now uses chunked protocol
