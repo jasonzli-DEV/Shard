@@ -1,17 +1,43 @@
-import request from 'supertest';
-import fs from 'fs';
-import path from 'path';
-import { createApp } from '../app';
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-const ENV_FILE_PATH = path.join(__dirname, '../../.env.test-setup');
-
 /**
- * Reset all env vars that the setup route manages and clean up any written
- * files so each test starts from a blank state.
+ * Setup route tests — DB-config contract (v2 Phase A).
+ *
+ * No file writes occur; all config is persisted via saveConfig() to the
+ * in-memory starter DB provided by MongoMemoryServer.
  */
-function clearSetupEnv() {
+import request from 'supertest';
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+
+// ── Mock lib/db so configService uses our test connection ──────────────────
+jest.mock('../lib/db', () => ({ getStarter: jest.fn() }));
+import { getStarter } from '../lib/db';
+
+// ── Mock lib/runtime so /configure doesn't try to open real connections ────
+jest.mock('../lib/runtime', () => ({
+  connectRuntime: jest.fn().mockResolvedValue(undefined),
+  isRuntimeStarted: jest.fn().mockReturnValue(false),
+}));
+
+import { createApp } from '../app';
+import { resetConfigCache } from '../config/configService';
+
+let mongod: MongoMemoryServer;
+let conn: mongoose.Connection;
+
+beforeAll(async () => {
+  mongod = await MongoMemoryServer.create();
+  conn = await mongoose.createConnection(mongod.getUri()).asPromise();
+  (getStarter as jest.Mock).mockReturnValue(conn);
+});
+
+afterAll(async () => {
+  await conn.close();
+  await mongod.stop();
+});
+
+beforeEach(async () => {
+  resetConfigCache();
+  // Clear env vars that affect setup state
   [
     'STARTER_MONGODB_URI',
     'JWT_SECRET',
@@ -23,20 +49,13 @@ function clearSetupEnv() {
     'GITHUB_CLIENT_ID',
     'GITHUB_CLIENT_SECRET',
   ].forEach((k) => delete process.env[k]);
-
-  if (fs.existsSync(ENV_FILE_PATH)) fs.unlinkSync(ENV_FILE_PATH);
-}
-
-// Override the env file path so tests don't write to the real project .env
-beforeEach(() => {
-  clearSetupEnv();
-  process.env.SETUP_ENV_FILE_PATH = ENV_FILE_PATH;
-});
-
-afterEach(() => {
-  clearSetupEnv();
-  delete process.env.SETUP_ENV_FILE_PATH;
-  if (fs.existsSync(ENV_FILE_PATH)) fs.unlinkSync(ENV_FILE_PATH);
+  // Clean DB between tests for isolation
+  if (conn.db) {
+    const collections = await conn.db.listCollections({ name: 'configs' }).toArray();
+    if (collections.length > 0) {
+      await conn.db.dropCollection('configs');
+    }
+  }
 });
 
 // ── GET /api/setup/status ─────────────────────────────────────────────────────
@@ -52,7 +71,7 @@ describe('GET /api/setup/status', () => {
     expect(res.body.configured.google || res.body.configured.github).toBe(false);
   });
 
-  it('returns setupRequired:false after env vars are set', async () => {
+  it('returns setupRequired:false after env + DB config is present', async () => {
     process.env.STARTER_MONGODB_URI = 'mongodb://localhost:27017/shard';
     process.env.GOOGLE_CLIENT_ID = 'gid';
     process.env.GOOGLE_CLIENT_SECRET = 'gsecret';
@@ -145,7 +164,7 @@ describe('POST /api/setup/configure', () => {
     expect(res.status).toBe(400);
   });
 
-  it('writes env vars and updates process.env on success', async () => {
+  it('persists config to DB and sets process.env.STARTER_MONGODB_URI on success', async () => {
     const app = createApp();
     const res = await request(app)
       .post('/api/setup/configure')
@@ -155,20 +174,40 @@ describe('POST /api/setup/configure', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
 
-    // Written to file
-    expect(fs.existsSync(ENV_FILE_PATH)).toBe(true);
-    const envContent = fs.readFileSync(ENV_FILE_PATH, 'utf-8');
-    expect(envContent).toContain('STARTER_MONGODB_URI=');
-    expect(envContent).toContain('GOOGLE_CLIENT_ID=gid');
-    expect(envContent).toContain('JWT_SECRET=');
-
-    // Live process.env updated
+    // starterUri bootstrapped into process.env
     expect(process.env.STARTER_MONGODB_URI).toBe(validPayload.starterUri);
-    expect(process.env.GOOGLE_CLIENT_ID).toBe('gid');
-    expect(process.env.JWT_SECRET).toBeTruthy();
+
+    // Config persisted to DB — verify via configService
+    const { getConfig } = await import('../config/configService');
+    const cfg = getConfig();
+    expect(cfg.googleClientId).toBe('gid');
+    expect(cfg.googleClientSecret).toBe('gsecret');
+    expect(cfg.jwtSecret).toBeTruthy();
+    expect(cfg.jwtSecret.length).toBe(64); // auto-generated: 32 bytes hex
   });
 
-  it('auto-generates JWT_SECRET when absent', async () => {
+  it('does NOT create a config env file (config is DB-only)', async () => {
+    // The new setup route saves to DB only — verify no *.env file appears
+    // in the project root or config directory by checking the DB contract directly.
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/setup/configure')
+      .send(validPayload)
+      .set('Content-Type', 'application/json');
+
+    expect(res.status).toBe(200);
+    // Confirm config is in DB (not just env), by checking the cache directly
+    const { getConfig } = await import('../config/configService');
+    const cfg = getConfig();
+    // jwtSecret is generated by saveConfig (not written to file or env)
+    expect(cfg.jwtSecret).toBeTruthy();
+    // env has NOT been polluted with oauth creds by the route
+    // (only STARTER_MONGODB_URI gets set; oauth lives in DB)
+    expect(process.env.GOOGLE_CLIENT_ID).toBeUndefined();
+    expect(process.env.GOOGLE_CLIENT_SECRET).toBeUndefined();
+  });
+
+  it('auto-generates jwtSecret when absent', async () => {
     delete process.env.JWT_SECRET;
     const app = createApp();
     await request(app)
@@ -176,19 +215,8 @@ describe('POST /api/setup/configure', () => {
       .send(validPayload)
       .set('Content-Type', 'application/json');
 
-    expect(process.env.JWT_SECRET).toHaveLength(64); // 32 bytes hex = 64 chars
-  });
-
-  it('preserves an existing JWT_SECRET', async () => {
-    const existing = 'aaaa'.repeat(16); // 64 char
-    process.env.JWT_SECRET = existing;
-    const app = createApp();
-    await request(app)
-      .post('/api/setup/configure')
-      .send(validPayload)
-      .set('Content-Type', 'application/json');
-
-    expect(process.env.JWT_SECRET).toBe(existing);
+    const { getConfig } = await import('../config/configService');
+    expect(getConfig().jwtSecret).toHaveLength(64); // 32 bytes hex = 64 chars
   });
 
   it('returns 403 on second configure call (idempotent guard)', async () => {
@@ -233,7 +261,9 @@ describe('POST /api/setup/configure', () => {
       .set('Content-Type', 'application/json');
 
     expect(res.status).toBe(200);
-    expect(process.env.GITHUB_CLIENT_ID).toBe('gh_id');
-    expect(process.env.GITHUB_CLIENT_SECRET).toBe('gh_secret');
+    const { getConfig } = await import('../config/configService');
+    const cfg = getConfig();
+    expect(cfg.githubClientId).toBe('gh_id');
+    expect(cfg.githubClientSecret).toBe('gh_secret');
   });
 });

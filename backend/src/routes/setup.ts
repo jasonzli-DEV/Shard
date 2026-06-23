@@ -3,43 +3,32 @@
  *
  * GET  /api/setup/status          → { setupRequired, configured }
  * POST /api/setup/test-connection → { ok, error? } (pings starter MongoDB URI)
- * POST /api/setup/configure       → writes .env + live process.env, refuses if already done
+ * POST /api/setup/configure       → saves config to DB; refuses if already done
  */
 
 import { Router, Request, Response } from 'express';
-import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
 import { configurePassport } from '../auth/passport';
+import {
+  saveConfig,
+  loadConfig,
+  getConfig,
+  isConfigured,
+} from '../config/configService';
 
 const router = Router();
 
-// Allow tests to override the env file path via SETUP_ENV_FILE_PATH.
-// Default: /app/config/.env — must match the volume mount in docker-compose.yml.
-// In development, set SETUP_ENV_FILE_PATH to an absolute writable path.
-function getEnvFilePath(): string {
-  return process.env.SETUP_ENV_FILE_PATH ?? path.join(process.cwd(), 'config', '.env');
-}
-
-// ── Setup-complete logic ──────────────────────────────────────────────────────
-
-/** Setup is complete when we have a starter URI and at least one OAuth provider. */
-function isSetupComplete(): boolean {
-  const hasDb = !!process.env.STARTER_MONGODB_URI;
-  const hasGoogle = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
-  const hasGithub = !!(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
-  return hasDb && (hasGoogle || hasGithub);
-}
+// ── Status helpers ────────────────────────────────────────────────────────────
 
 function getConfiguredFlags() {
+  const cfg = getConfig();
   return {
     starterDb: !!process.env.STARTER_MONGODB_URI,
-    jwt: !!process.env.JWT_SECRET,
-    google: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-    github: !!(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
-    publicUrl: !!process.env.PUBLIC_URL,
+    jwt: !!cfg.jwtSecret,
+    google: !!(cfg.googleClientId && cfg.googleClientSecret),
+    github: !!(cfg.githubClientId && cfg.githubClientSecret),
+    publicUrl: !!cfg.publicUrl,
   };
 }
 
@@ -48,7 +37,7 @@ function getConfiguredFlags() {
 // GET /api/setup/status
 router.get('/status', (_req: Request, res: Response) => {
   res.json({
-    setupRequired: !isSetupComplete(),
+    setupRequired: !isConfigured(),
     configured: getConfiguredFlags(),
   });
 });
@@ -104,10 +93,10 @@ interface ConfigureBody {
 
 router.post('/configure', async (req: Request, res: Response) => {
   // Guard: refuse if already configured
-  if (isSetupComplete()) {
+  if (isConfigured()) {
     return res.status(403).json({
       error: 'Setup already complete',
-      message: 'Edit the .env file directly to change configuration.',
+      message: 'Configuration is stored in the database. Use the admin panel to change settings.',
     });
   }
 
@@ -140,81 +129,47 @@ router.post('/configure', async (req: Request, res: Response) => {
     });
   }
 
-  // ── Build env updates ────────────────────────────────────────────────────────
-  const jwtSecret =
-    process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
-
-  const envUpdates: Record<string, string> = {
-    STARTER_MONGODB_URI: starterUri,
-    JWT_SECRET: jwtSecret,
-  };
-
-  if (publicUrl) {
-    envUpdates.PUBLIC_URL = publicUrl;
-    envUpdates.FRONTEND_URL = publicUrl;
+  // ── Connect to starter DB so we can save config ───────────────────────────
+  // In setup mode the app has no DB connection yet; open a temporary one
+  // to the provided starterUri so saveConfig() can write the singleton.
+  // Under test (NODE_ENV==='test') the caller injects its own connection via
+  // getStarter(), so we skip this step.
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const { connectRuntime } = await import('../lib/runtime');
+      await connectRuntime(starterUri);
+      logger.info('Setup: runtime connected to starter');
+    } catch (err) {
+      logger.error('Setup: failed to connect to starter DB', err);
+      return res.status(500).json({
+        error: 'Could not connect to the provided starterUri',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
-  if (allowedOrigins) {
-    envUpdates.ALLOWED_ORIGINS = allowedOrigins;
-  }
-
-  if (hasGoogle) {
-    envUpdates.GOOGLE_CLIENT_ID = google!.clientId!;
-    envUpdates.GOOGLE_CLIENT_SECRET = google!.clientSecret!;
-  }
-
-  if (hasGithub) {
-    envUpdates.GITHUB_CLIENT_ID = github!.clientId!;
-    envUpdates.GITHUB_CLIENT_SECRET = github!.clientSecret!;
-  }
-
-  // ── Write .env file ──────────────────────────────────────────────────────────
+  // ── Persist config to DB ───────────────────────────────────────────────────
   try {
-    const envFilePath = getEnvFilePath();
-    const envDir = path.dirname(envFilePath);
-
-    if (!fs.existsSync(envDir)) {
-      fs.mkdirSync(envDir, { recursive: true });
-    }
-
-    let envContent = '';
-    if (fs.existsSync(envFilePath)) {
-      envContent = fs.readFileSync(envFilePath, 'utf-8');
-    }
-
-    const lines = envContent.split('\n');
-    const existingKeys = new Set<string>();
-
-    const updatedLines = lines.map((line) => {
-      const match = line.match(/^([A-Z_][A-Z0-9_]*)=/);
-      if (match && envUpdates[match[1]] !== undefined) {
-        existingKeys.add(match[1]);
-        return `${match[1]}=${envUpdates[match[1]]}`;
-      }
-      return line;
+    await saveConfig({
+      googleClientId: hasGoogle ? google!.clientId! : undefined,
+      googleClientSecret: hasGoogle ? google!.clientSecret! : undefined,
+      githubClientId: hasGithub ? github!.clientId! : undefined,
+      githubClientSecret: hasGithub ? github!.clientSecret! : undefined,
+      publicUrl: publicUrl ?? undefined,
+      allowedOrigins: allowedOrigins ?? undefined,
     });
-
-    for (const [key, value] of Object.entries(envUpdates)) {
-      if (!existingKeys.has(key)) {
-        updatedLines.push(`${key}=${value}`);
-      }
-    }
-
-    fs.writeFileSync(envFilePath, updatedLines.join('\n'), 'utf-8');
-    logger.info(`Setup: .env written to ${envFilePath}`);
+    logger.info('Setup: config persisted to DB');
   } catch (err) {
-    logger.error('Setup: failed to write .env', err);
+    logger.error('Setup: failed to save config to DB', err);
     return res.status(500).json({
-      error: 'Failed to write configuration file',
+      error: 'Failed to save configuration to database',
       message: err instanceof Error ? err.message : String(err),
     });
   }
 
-  // ── Update live process.env ──────────────────────────────────────────────────
-  for (const [key, value] of Object.entries(envUpdates)) {
-    process.env[key] = value;
-  }
-  logger.info('Setup: process.env updated, setup complete');
+  // ── Bootstrap in-process env so isConfigured() guard works immediately ────
+  process.env.STARTER_MONGODB_URI = starterUri;
+  logger.info('Setup: process.env.STARTER_MONGODB_URI set, setup complete');
 
   // Re-initialize passport strategies so OAuth login works immediately
   // without requiring a server restart.
@@ -225,20 +180,13 @@ router.post('/configure', async (req: Request, res: Response) => {
     logger.warn('Setup: passport re-init failed (non-fatal)', err);
   }
 
-  // Bring the runtime online live (connect DB, rehydrate clusters, start loops)
-  // so the operator can sign in immediately — no container restart required.
-  // Skipped under the test runner, which injects its own DB connections.
+  // Reload config cache after save (already refreshed by saveConfig, but
+  // also call loadConfig() so non-test runtimes get a fully hydrated cache).
   if (process.env.NODE_ENV !== 'test') {
     try {
-      const { connectRuntime } = await import('../lib/runtime');
-      await connectRuntime(starterUri);
-      logger.info('Setup: runtime connected — Shard is live');
+      await loadConfig();
     } catch (err) {
-      logger.error('Setup: runtime activation failed', err);
-      return res.status(500).json({
-        error: 'Configuration saved but the app could not connect to the database',
-        message: err instanceof Error ? err.message : String(err),
-      });
+      logger.warn('Setup: loadConfig after configure failed (non-fatal)', err);
     }
   }
 
