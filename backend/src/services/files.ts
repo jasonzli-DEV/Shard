@@ -107,6 +107,7 @@ export async function list(userId: string, parentId: string | null): Promise<IFi
   const query: Record<string, unknown> = {
     userId: new Types.ObjectId(userId),
     deletedAt: null,
+    uploading: { $ne: true },
   };
 
   if (parentId) {
@@ -378,6 +379,7 @@ export async function search(userId: string, query: string): Promise<IFile[]> {
   return FileModel.find({
     userId: new Types.ObjectId(userId),
     deletedAt: null,
+    uploading: { $ne: true },
     name: { $regex: escapeRegex(query.trim()), $options: 'i' },
   }).sort({ name: 1 });
 }

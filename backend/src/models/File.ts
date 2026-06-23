@@ -13,6 +13,8 @@ export interface IFile extends Document {
   type: FileType;
   starred: boolean;
   encrypted: boolean;
+  /** True while a chunked upload is in progress; false once complete (or not applicable). */
+  uploading: boolean;
   deletedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -29,6 +31,7 @@ const FileSchema = new Schema<IFile>(
     type: { type: String, enum: ['file', 'folder'], required: true },
     starred: { type: Boolean, default: false },
     encrypted: { type: Boolean, default: false },
+    uploading: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true }

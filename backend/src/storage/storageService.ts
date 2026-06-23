@@ -59,26 +59,32 @@ export async function storeFile(opts: StoreFileOptions): Promise<IFile | null> {
     encrypted: encrypt,
   });
 
-  // Optionally encrypt the full buffer before splitting
-  // (per-blob encryption keeps each stored chunk independently decryptable,
-  //  but the spec says "optionally encrypted" so we do a single-pass encrypt here
-  //  and store the encrypted bytes split across clusters)
-  const payload = encrypt ? encryptBuffer(buffer, encryptionKey!) : buffer;
-
-  // Split payload across clusters: fill current cluster remainder, then overflow
+  // Split payload across clusters using per-chunk (per-blob) encryption.
+  // Each plaintext chunk is independently encrypted before being written to GridFS,
+  // so each Blob is self-contained and can be decrypted without its neighbours.
+  // When not encrypted, the chunk is written as-is.
   let offset = 0;
   let blobIndex = 0;
 
   try {
-    while (offset < payload.length) {
+    while (offset < buffer.length) {
       // Ask for at least 1 byte of free space.  ensureCapacity returns the
       // active cluster when it has any usable room, and provisions a new one
       // only when the active cluster is full.  chunkSize below handles the
       // partial-fill: we write only what fits, then loop for the remainder.
       const cluster = await ensureCapacity(userId, 1);
       const free = USABLE_BYTES - cluster.storageUsedBytes;
-      const chunkSize = Math.min(free, payload.length - offset);
-      const chunk = payload.subarray(offset, offset + chunkSize);
+
+      // When encrypting, reserve room for the encryption overhead so the
+      // stored blob fits within the cluster's remaining capacity.
+      const maxPlaintext = encrypt
+        ? Math.max(1, free - ENCRYPTION_OVERHEAD)
+        : free;
+      const plaintextChunkSize = Math.min(maxPlaintext, buffer.length - offset);
+      const plaintextChunk = buffer.subarray(offset, offset + plaintextChunkSize);
+
+      // Optionally encrypt this chunk independently
+      const storedChunk = encrypt ? encryptBuffer(plaintextChunk, encryptionKey!) : plaintextChunk;
 
       // Write chunk to GridFS on this cluster.
       // getOrOpenBucket opens the connection lazily if it was not rehydrated at boot.
@@ -87,7 +93,7 @@ export async function storeFile(opts: StoreFileOptions): Promise<IFile | null> {
         throw new Error(`No GridFS bucket available for cluster ${cluster.clusterId}`);
       }
 
-      const gridfsId = await writeToGridFS(bucket as MongooseGridFSBucket, chunk, `${fileDoc._id}_${blobIndex}`);
+      const gridfsId = await writeToGridFS(bucket as MongooseGridFSBucket, storedChunk, `${fileDoc._id}_${blobIndex}`);
 
       // Record Blob
       await BlobModel.create({
@@ -95,15 +101,16 @@ export async function storeFile(opts: StoreFileOptions): Promise<IFile | null> {
         clusterId: cluster._id, // ObjectId of StorageCluster doc
         gridfsId,
         index: blobIndex,
-        size: chunk.length,
+        size: storedChunk.length,
+        plaintextSize: plaintextChunkSize,
       });
 
       // Update cluster's storageUsedBytes
       await StorageClusterModel.findByIdAndUpdate(cluster._id, {
-        $inc: { storageUsedBytes: chunk.length },
+        $inc: { storageUsedBytes: storedChunk.length },
       });
 
-      offset += chunkSize;
+      offset += plaintextChunkSize;
       blobIndex += 1;
     }
   } catch (err) {

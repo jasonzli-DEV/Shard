@@ -11,7 +11,10 @@ export interface IBlob extends Document {
   gridfsId: Types.ObjectId;
   /** Zero-based order for multi-cluster files */
   index: number;
+  /** Stored byte size (may include encryption overhead) */
   size: number;
+  /** Plaintext (logical) byte size before encryption; equals size when not encrypted */
+  plaintextSize: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +26,7 @@ const BlobSchema = new Schema<IBlob>(
     gridfsId: { type: Schema.Types.ObjectId, required: true },
     index: { type: Number, required: true },
     size: { type: Number, required: true },
+    plaintextSize: { type: Number, required: true },
   },
   { timestamps: true }
 );
