@@ -10,6 +10,7 @@ import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
 import { configurePassport } from '../auth/passport';
+import { connectRuntime } from '../lib/runtime';
 import {
   saveConfig,
   loadConfig,
@@ -140,7 +141,6 @@ router.post('/configure', async (req: Request, res: Response) => {
   // getStarter(), so we skip this step.
   if (process.env.NODE_ENV !== 'test') {
     try {
-      const { connectRuntime } = await import('../lib/runtime');
       await connectRuntime(starterUri);
       logger.info('Setup: runtime connected to starter');
     } catch (err) {

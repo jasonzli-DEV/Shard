@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { StorageClusterModel, type IStorageCluster } from '../models';
+import { logger } from '../utils/logger';
 
 /** Hard Atlas M0 limit per cluster */
 export const STORAGE_LIMIT_BYTES = 512 * 1024 * 1024; // 512 MB
@@ -71,8 +72,6 @@ export async function getOrOpenBucket(clusterId: string): Promise<unknown | null
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Import lazily to avoid a circular reference at module load time
-    const { logger } = await import('../utils/logger');
     logger.error(`clusterManager: failed to open cluster "${clusterId}" on demand`, { error: msg });
     return null;
   }
