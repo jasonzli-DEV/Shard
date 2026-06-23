@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { uploadFile } from '../api/files';
+import { uploadFileChunked } from '../api/files';
 
 export type UploadStatus = 'pending' | 'uploading' | 'done' | 'error';
 
@@ -39,7 +39,7 @@ export function useUpload(
         updateUpload(item.id, { status: 'uploading' });
 
         try {
-          await uploadFile(file, folderId, (percent) => {
+          await uploadFileChunked(file, folderId, (percent) => {
             updateUpload(item.id, { progress: percent });
           });
           updateUpload(item.id, { status: 'done', progress: 100 });

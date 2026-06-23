@@ -1,18 +1,27 @@
 /**
- * File routes — Phase 5.2
+ * File routes — Phase 5.2 + chunked upload extension
  *
  * Session-auth (and API-key-auth) file CRUD + upload/download endpoints.
  * Mount this router at /api in app.ts — it registers /files, /folders, /trash, /search.
+ *
+ * Chunked upload protocol (for Vercel serverless where request bodies > 4.5 MB are rejected):
+ *   POST /api/files/upload/init     — create a File stub (uploading:true), returns {fileId}
+ *   POST /api/files/upload/chunk    — raw binary, query ?fileId=&index=, idempotent per index
+ *   POST /api/files/upload/complete — finalise: sum blob sizes → File.size, uploading:false
+ *   POST /api/files/upload/abort    — delete File + all blobs + GridFS objects
  */
-import { Router, Request, Response } from 'express';
-import mongoose from 'mongoose';
+import { Router, Request, Response, raw as expressRaw } from 'express';
+import mongoose, { Types } from 'mongoose';
 import multer from 'multer';
 import { requireAuth } from '../middleware/auth';
 import { UserModel } from '../models/User';
 import { FileModel } from '../models/File';
+import { BlobModel } from '../models/Blob';
 import { getStarter } from '../lib/db';
 import * as fileService from '../services/files';
 import * as storageService from '../storage/storageService';
+import { ensureCapacity } from '../storage/provisioner';
+import { getUniqueName, buildPath } from '../utils/paths';
 import { canAccess } from '../services/shares';
 import { logger } from '../utils/logger';
 import { handleStarterWriteError } from '../utils/starterErrors';
@@ -100,6 +109,223 @@ router.post('/folders', async (req: Request, res: Response) => {
       logger.error('POST /api/folders error', { error: err.message });
       res.status(500).json({ error: 'Internal server error' });
     }
+  }
+});
+
+// ── POST /api/files/upload/init ───────────────────────────────────────────────
+// Creates a File stub with uploading:true. Returns {fileId}.
+router.post('/files/upload/init', async (req: Request, res: Response) => {
+  const userId = (req as any).userId as string;
+  const {
+    name,
+    parentId = null,
+    mimeType = 'application/octet-stream',
+    encrypt,
+  } = req.body as {
+    name?: string;
+    parentId?: string | null;
+    mimeType?: string;
+    size?: number;
+    encrypt?: boolean;
+  };
+
+  if (!name) {
+    res.status(400).json({ error: 'name is required' });
+    return;
+  }
+
+  try {
+    const User = getUserModel();
+    const user = await User.findById(userId);
+    const shouldEncrypt = encrypt !== undefined ? encrypt : (user?.encryptionEnabled ?? false);
+
+    // Resolve parent path for path deduplication
+    let parentPath: string | null = null;
+    if (parentId) {
+      if (!Types.ObjectId.isValid(parentId)) {
+        res.status(400).json({ error: 'Invalid parentId' });
+        return;
+      }
+      const parentDoc = await FileModel.findById(parentId).select('path');
+      parentPath = parentDoc?.path ?? null;
+    }
+
+    const uniqueName = await getUniqueName(userId, parentPath, name);
+    const filePath = buildPath(parentPath, uniqueName);
+
+    const fileDoc = await FileModel.create({
+      userId: new Types.ObjectId(userId),
+      parentId: parentId ? new Types.ObjectId(parentId) : null,
+      name: uniqueName,
+      path: filePath,
+      mimeType,
+      size: 0,
+      type: 'file',
+      encrypted: shouldEncrypt,
+      uploading: true,
+    });
+
+    res.status(201).json({ fileId: fileDoc._id.toString() });
+  } catch (err: any) {
+    if (handleStarterWriteError(err, res)) return;
+    logger.error('POST /api/files/upload/init error', { error: err.message });
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// ── POST /api/files/upload/chunk ──────────────────────────────────────────────
+// Raw binary body. Query params: fileId, index.
+// express.raw() is applied per-route so it doesn't interfere with other routes.
+router.post(
+  '/files/upload/chunk',
+  expressRaw({ type: ['application/octet-stream', 'application/octet-stream; *'], limit: '8mb' }),
+  async (req: Request, res: Response) => {
+    const userId = (req as any).userId as string;
+    const fileId = req.query.fileId as string;
+    const indexStr = req.query.index as string;
+
+    if (!fileId || !Types.ObjectId.isValid(fileId)) {
+      res.status(400).json({ error: 'fileId query param is required and must be a valid ObjectId' });
+      return;
+    }
+
+    const index = Number(indexStr);
+    if (!Number.isInteger(index) || index < 0) {
+      res.status(400).json({ error: 'index query param must be a non-negative integer' });
+      return;
+    }
+
+    const chunkBuffer = req.body as Buffer;
+    if (!Buffer.isBuffer(chunkBuffer) || chunkBuffer.length === 0) {
+      res.status(400).json({ error: 'Request body must be non-empty binary data' });
+      return;
+    }
+
+    try {
+      const fileDoc = await FileModel.findOne({
+        _id: new Types.ObjectId(fileId),
+        userId: new Types.ObjectId(userId),
+      });
+
+      if (!fileDoc) {
+        res.status(404).json({ error: 'File not found' });
+        return;
+      }
+
+      if (!fileDoc.uploading) {
+        res.status(409).json({ error: 'Upload already completed or was aborted' });
+        return;
+      }
+
+      // Get cluster with capacity for this chunk
+      const cluster = await ensureCapacity(userId, chunkBuffer.length);
+
+      // Get encryption key if needed
+      let encryptionKey: string | undefined;
+      if (fileDoc.encrypted) {
+        const User = getUserModel();
+        const user = await User.findById(userId);
+        encryptionKey = user?.encryptionKey ?? undefined;
+        if (!encryptionKey) {
+          res.status(500).json({ error: 'Encryption key not found for user' });
+          return;
+        }
+      }
+
+      await storageService.storeChunk({
+        fileId,
+        index,
+        buffer: chunkBuffer,
+        cluster,
+        encrypt: fileDoc.encrypted,
+        encryptionKey,
+      });
+
+      res.json({ ok: true, index });
+    } catch (err: any) {
+      if (handleStarterWriteError(err, res)) return;
+      logger.error('POST /api/files/upload/chunk error', { error: err.message });
+      res.status(500).json({ error: err.message || 'Internal server error' });
+    }
+  },
+);
+
+// ── POST /api/files/upload/complete ──────────────────────────────────────────
+// Finalises a chunked upload: computes total size from blob plaintextSizes, clears uploading flag.
+router.post('/files/upload/complete', async (req: Request, res: Response) => {
+  const userId = (req as any).userId as string;
+  const { fileId } = req.body as { fileId?: string };
+
+  if (!fileId || !Types.ObjectId.isValid(fileId)) {
+    res.status(400).json({ error: 'fileId is required' });
+    return;
+  }
+
+  try {
+    const fileDoc = await FileModel.findOne({
+      _id: new Types.ObjectId(fileId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!fileDoc) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    if (!fileDoc.uploading) {
+      res.status(409).json({ error: 'Upload already completed or was aborted' });
+      return;
+    }
+
+    // Sum logical (plaintext) sizes of all blobs
+    const blobs = await BlobModel.find({ fileId: new Types.ObjectId(fileId) });
+    if (blobs.length === 0) {
+      res.status(400).json({ error: 'No chunks uploaded yet' });
+      return;
+    }
+    const totalSize = blobs.reduce((sum, b) => sum + b.plaintextSize, 0);
+
+    const updated = await FileModel.findByIdAndUpdate(
+      fileId,
+      { size: totalSize, uploading: false },
+      { new: true },
+    );
+
+    res.json(updated);
+  } catch (err: any) {
+    logger.error('POST /api/files/upload/complete error', { error: err.message });
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// ── POST /api/files/upload/abort ─────────────────────────────────────────────
+// Deletes all blobs + GridFS objects + the File doc for an in-progress upload.
+router.post('/files/upload/abort', async (req: Request, res: Response) => {
+  const userId = (req as any).userId as string;
+  const { fileId } = req.body as { fileId?: string };
+
+  if (!fileId || !Types.ObjectId.isValid(fileId)) {
+    res.status(400).json({ error: 'fileId is required' });
+    return;
+  }
+
+  try {
+    const fileDoc = await FileModel.findOne({
+      _id: new Types.ObjectId(fileId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!fileDoc) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    await storageService.abortUpload(fileId);
+
+    res.json({ ok: true });
+  } catch (err: any) {
+    logger.error('POST /api/files/upload/abort error', { error: err.message });
+    res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });
 

@@ -21,9 +21,21 @@ jest.mock('../../storage/storageService', () => ({
   storeFile: jest.fn(),
   readFile: jest.fn(),
   deleteFileBytes: jest.fn().mockResolvedValue(undefined),
+  storeChunk: jest.fn().mockResolvedValue(1024),
+  abortUpload: jest.fn().mockResolvedValue(undefined),
 }));
 
-import { storeFile, readFile } from '../../storage/storageService';
+// Mock ensureCapacity from provisioner
+jest.mock('../../storage/provisioner', () => ({
+  ensureCapacity: jest.fn().mockResolvedValue({
+    _id: new (require('mongoose').Types.ObjectId)(),
+    clusterId: 'test-cluster',
+    storageUsedBytes: 0,
+    storageCapacityBytes: 512 * 1024 * 1024,
+  }),
+}));
+
+import { storeFile, readFile, storeChunk, abortUpload } from '../../storage/storageService';
 
 let mongod: MongoMemoryServer;
 let conn: mongoose.Connection;
@@ -541,6 +553,235 @@ describe('File routes', () => {
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBe(1);
       expect(res.body[0].name).toBe('invoice-2024.pdf');
+    });
+  });
+
+  describe('Chunked upload routes', () => {
+    describe('POST /api/files/upload/init', () => {
+      it('requires auth', async () => {
+        const res = await request(app)
+          .post('/api/files/upload/init')
+          .send({ name: 'big.mp4', mimeType: 'video/mp4', size: 10_000_000 });
+        expect(res.status).toBe(401);
+      });
+
+      it('returns 400 without name', async () => {
+        const res = await request(app)
+          .post('/api/files/upload/init')
+          .set('Cookie', sessionCookie)
+          .send({ mimeType: 'video/mp4' });
+        expect(res.status).toBe(400);
+      });
+
+      it('creates a File stub and returns fileId', async () => {
+        const res = await request(app)
+          .post('/api/files/upload/init')
+          .set('Cookie', sessionCookie)
+          .send({ name: 'video.mp4', mimeType: 'video/mp4', size: 8_000_000 });
+
+        expect(res.status).toBe(201);
+        expect(res.body.fileId).toBeTruthy();
+
+        const fileDoc = await FileModel.findById(res.body.fileId);
+        expect(fileDoc).toBeTruthy();
+        expect(fileDoc!.uploading).toBe(true);
+        expect(fileDoc!.name).toBe('video.mp4');
+      });
+
+      it('excludes uploading files from GET /api/files', async () => {
+        const initRes = await request(app)
+          .post('/api/files/upload/init')
+          .set('Cookie', sessionCookie)
+          .send({ name: 'pending.mp4', mimeType: 'video/mp4' });
+        expect(initRes.status).toBe(201);
+
+        const listRes = await request(app).get('/api/files').set('Cookie', sessionCookie);
+        expect(listRes.status).toBe(200);
+        const found = listRes.body.find((f: any) => f.name === 'pending.mp4');
+        expect(found).toBeUndefined();
+      });
+    });
+
+    describe('POST /api/files/upload/chunk', () => {
+      it('requires auth', async () => {
+        const res = await request(app)
+          .post('/api/files/upload/chunk?fileId=000000000000000000000000&index=0')
+          .set('Content-Type', 'application/octet-stream')
+          .send(Buffer.from('data'));
+        expect(res.status).toBe(401);
+      });
+
+      it('returns 400 for missing fileId', async () => {
+        const res = await request(app)
+          .post('/api/files/upload/chunk?index=0')
+          .set('Cookie', sessionCookie)
+          .set('Content-Type', 'application/octet-stream')
+          .send(Buffer.from('data'));
+        expect(res.status).toBe(400);
+      });
+
+      it('returns 404 for unknown fileId', async () => {
+        const fakeId = new Types.ObjectId().toString();
+        const res = await request(app)
+          .post(`/api/files/upload/chunk?fileId=${fakeId}&index=0`)
+          .set('Cookie', sessionCookie)
+          .set('Content-Type', 'application/octet-stream')
+          .send(Buffer.from('chunk data'));
+        expect(res.status).toBe(404);
+      });
+
+      it('stores a chunk and returns {ok:true,index}', async () => {
+        // Create an in-progress file
+        const fileDoc = await FileModel.create({
+          userId: new Types.ObjectId(userId),
+          name: 'chunk-test.bin',
+          path: '/chunk-test.bin',
+          mimeType: 'application/octet-stream',
+          size: 0,
+          type: 'file',
+          uploading: true,
+        });
+
+        const res = await request(app)
+          .post(`/api/files/upload/chunk?fileId=${fileDoc._id}&index=0`)
+          .set('Cookie', sessionCookie)
+          .set('Content-Type', 'application/octet-stream')
+          .send(Buffer.from('hello chunk'));
+
+        expect(res.status).toBe(200);
+        expect(res.body.ok).toBe(true);
+        expect(res.body.index).toBe(0);
+        expect(storeChunk).toHaveBeenCalled();
+      });
+
+      it('returns 409 if file is already completed', async () => {
+        const fileDoc = await FileModel.create({
+          userId: new Types.ObjectId(userId),
+          name: 'completed.bin',
+          path: '/completed.bin',
+          mimeType: 'application/octet-stream',
+          size: 100,
+          type: 'file',
+          uploading: false,
+        });
+
+        const res = await request(app)
+          .post(`/api/files/upload/chunk?fileId=${fileDoc._id}&index=0`)
+          .set('Cookie', sessionCookie)
+          .set('Content-Type', 'application/octet-stream')
+          .send(Buffer.from('data'));
+
+        expect(res.status).toBe(409);
+      });
+    });
+
+    describe('POST /api/files/upload/complete', () => {
+      it('requires auth', async () => {
+        const res = await request(app)
+          .post('/api/files/upload/complete')
+          .send({ fileId: new Types.ObjectId().toString() });
+        expect(res.status).toBe(401);
+      });
+
+      it('returns 400 without fileId', async () => {
+        const res = await request(app)
+          .post('/api/files/upload/complete')
+          .set('Cookie', sessionCookie)
+          .send({});
+        expect(res.status).toBe(400);
+      });
+
+      it('finalises upload: sets size and uploading:false', async () => {
+        const { BlobModel } = require('../../models/Blob');
+        const fileDoc = await FileModel.create({
+          userId: new Types.ObjectId(userId),
+          name: 'tofinalise.bin',
+          path: '/tofinalise.bin',
+          mimeType: 'application/octet-stream',
+          size: 0,
+          type: 'file',
+          uploading: true,
+        });
+
+        // Seed blob records so complete can sum them
+        await BlobModel.create({
+          fileId: fileDoc._id,
+          clusterId: new Types.ObjectId(),
+          gridfsId: new Types.ObjectId(),
+          index: 0,
+          size: 1044,
+          plaintextSize: 1000,
+        });
+        await BlobModel.create({
+          fileId: fileDoc._id,
+          clusterId: new Types.ObjectId(),
+          gridfsId: new Types.ObjectId(),
+          index: 1,
+          size: 544,
+          plaintextSize: 500,
+        });
+
+        const res = await request(app)
+          .post('/api/files/upload/complete')
+          .set('Cookie', sessionCookie)
+          .send({ fileId: fileDoc._id.toString() });
+
+        expect(res.status).toBe(200);
+        expect(res.body.uploading).toBe(false);
+        expect(res.body.size).toBe(1500); // 1000 + 500 plaintext sizes
+
+        const updated = await FileModel.findById(fileDoc._id);
+        expect(updated!.uploading).toBe(false);
+        expect(updated!.size).toBe(1500);
+
+        await BlobModel.deleteMany({ fileId: fileDoc._id });
+      });
+
+      it('returns 404 for unknown fileId', async () => {
+        const res = await request(app)
+          .post('/api/files/upload/complete')
+          .set('Cookie', sessionCookie)
+          .send({ fileId: new Types.ObjectId().toString() });
+        expect(res.status).toBe(404);
+      });
+    });
+
+    describe('POST /api/files/upload/abort', () => {
+      it('requires auth', async () => {
+        const res = await request(app)
+          .post('/api/files/upload/abort')
+          .send({ fileId: new Types.ObjectId().toString() });
+        expect(res.status).toBe(401);
+      });
+
+      it('aborts upload and removes File doc', async () => {
+        const fileDoc = await FileModel.create({
+          userId: new Types.ObjectId(userId),
+          name: 'toabort.bin',
+          path: '/toabort.bin',
+          mimeType: 'application/octet-stream',
+          size: 0,
+          type: 'file',
+          uploading: true,
+        });
+
+        const res = await request(app)
+          .post('/api/files/upload/abort')
+          .set('Cookie', sessionCookie)
+          .send({ fileId: fileDoc._id.toString() });
+
+        expect(res.status).toBe(200);
+        expect(res.body.ok).toBe(true);
+        expect(abortUpload).toHaveBeenCalledWith(fileDoc._id.toString());
+      });
+
+      it('returns 404 for unknown fileId', async () => {
+        const res = await request(app)
+          .post('/api/files/upload/abort')
+          .set('Cookie', sessionCookie)
+          .send({ fileId: new Types.ObjectId().toString() });
+        expect(res.status).toBe(404);
+      });
     });
   });
 

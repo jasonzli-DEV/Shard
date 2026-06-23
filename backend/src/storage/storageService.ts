@@ -167,19 +167,19 @@ export async function readFile(fileId: string, encryptionKey?: string): Promise<
       throw new Error(`No GridFS bucket for cluster ${clusterDoc.clusterId}`);
     }
     const data = await readFromGridFS(bucket as MongooseGridFSBucket, blob.gridfsId);
-    parts.push(data);
-  }
 
-  const combined = Buffer.concat(parts);
-
-  if (fileDoc.encrypted) {
-    if (!encryptionKey) {
-      throw new Error('encryptionKey required to decrypt file');
+    // Each blob is independently encrypted — decrypt per-blob when the file is encrypted.
+    if (fileDoc.encrypted) {
+      if (!encryptionKey) {
+        throw new Error('encryptionKey required to decrypt file');
+      }
+      parts.push(decryptBuffer(data, encryptionKey));
+    } else {
+      parts.push(data);
     }
-    return decryptBuffer(combined, encryptionKey);
   }
 
-  return combined;
+  return Buffer.concat(parts);
 }
 
 /**
@@ -246,6 +246,91 @@ function readFromGridFS(bucket: MongooseGridFSBucket, gridfsId: Types.ObjectId):
 
 function deleteFromGridFS(bucket: MongooseGridFSBucket, gridfsId: Types.ObjectId): Promise<void> {
   return bucket.delete(gridfsId);
+}
+
+// ---- Chunked upload helpers -------------------------------------------------
+
+export interface StoreChunkOptions {
+  /** The File document _id (string) */
+  fileId: string;
+  /** Zero-based chunk index */
+  index: number;
+  /** Raw chunk bytes (plaintext) */
+  buffer: Buffer;
+  /** The StorageCluster doc returned by ensureCapacity */
+  cluster: import('../models/StorageCluster').IStorageCluster;
+  /** Whether to encrypt this chunk */
+  encrypt: boolean;
+  encryptionKey?: string;
+}
+
+/**
+ * Write one chunk of a chunked upload into GridFS and upsert the Blob record.
+ * Idempotent per index: if a Blob already exists for this fileId+index, the old
+ * GridFS object is deleted first, then a fresh one is written.
+ *
+ * Returns the number of bytes actually stored (possibly including encryption overhead).
+ */
+export async function storeChunk(opts: StoreChunkOptions): Promise<number> {
+  const { fileId, index, buffer, cluster, encrypt, encryptionKey } = opts;
+
+  if (encrypt && !encryptionKey) {
+    throw new Error('encryptionKey is required when encrypt is true');
+  }
+
+  const bucket = await getOrOpenBucket(cluster.clusterId);
+  if (!bucket) {
+    throw new Error(`No GridFS bucket available for cluster ${cluster.clusterId}`);
+  }
+
+  // Idempotent: remove existing blob + GridFS object for this index
+  const existingBlob = await BlobModel.findOne({
+    fileId: new Types.ObjectId(fileId),
+    index,
+  });
+  if (existingBlob) {
+    try {
+      await deleteFromGridFS(bucket as MongooseGridFSBucket, existingBlob.gridfsId);
+    } catch {
+      // best-effort: GridFS object may already be gone
+    }
+    await StorageClusterModel.findByIdAndUpdate(existingBlob.clusterId, {
+      $inc: { storageUsedBytes: -existingBlob.size },
+    });
+    await BlobModel.deleteOne({ _id: existingBlob._id });
+  }
+
+  const storedChunk = encrypt ? encryptBuffer(buffer, encryptionKey!) : buffer;
+
+  const gridfsId = await writeToGridFS(
+    bucket as MongooseGridFSBucket,
+    storedChunk,
+    `${fileId}_${index}`,
+  );
+
+  await BlobModel.create({
+    fileId: new Types.ObjectId(fileId),
+    clusterId: cluster._id,
+    gridfsId,
+    index,
+    size: storedChunk.length,
+    plaintextSize: buffer.length,
+  });
+
+  await StorageClusterModel.findByIdAndUpdate(cluster._id, {
+    $inc: { storageUsedBytes: storedChunk.length },
+  });
+
+  return storedChunk.length;
+}
+
+/**
+ * Delete all blobs + GridFS objects for a file, then delete the File doc.
+ * Used by the abort upload route.
+ */
+export async function abortUpload(fileId: string): Promise<void> {
+  await deleteFileBytes(fileId);
+  await FileModel.findByIdAndDelete(new Types.ObjectId(fileId));
 }
 
 // Re-export for use by other modules

@@ -40,7 +40,7 @@ export async function createFolder(payload: CreateFolderPayload): Promise<FileIt
   return data;
 }
 
-/** Upload a file with progress callback. */
+/** Upload a file with progress callback (legacy single-request multipart). */
 export async function uploadFile(
   file: File,
   parentId: string | null,
@@ -59,6 +59,96 @@ export async function uploadFile(
     },
   });
   return data;
+}
+
+// ── Chunked upload (for Vercel: requests > 4.5 MB are rejected) ───────────────
+
+/** Max chunk size: 4 MiB — stays safely under Vercel's 4.5 MB body limit. */
+export const CHUNK_SIZE = 4 * 1024 * 1024;
+
+export interface InitUploadPayload {
+  name: string;
+  parentId: string | null;
+  mimeType: string;
+  size: number;
+  encrypt?: boolean;
+}
+
+/** Initialise a chunked upload. Returns the fileId to use for subsequent calls. */
+export async function initUpload(payload: InitUploadPayload): Promise<string> {
+  const { data } = await client.post<{ fileId: string }>('/files/upload/init', payload);
+  return data.fileId;
+}
+
+/** Upload one raw chunk (ArrayBuffer/Buffer). Idempotent per index. */
+export async function uploadChunk(
+  fileId: string,
+  index: number,
+  chunk: ArrayBuffer,
+): Promise<void> {
+  await client.post(`/files/upload/chunk?fileId=${encodeURIComponent(fileId)}&index=${index}`, chunk, {
+    headers: { 'Content-Type': 'application/octet-stream' },
+    // Prevent axios from JSON-serialising the binary body
+    transformRequest: [(data: unknown) => data],
+  });
+}
+
+/** Finalise a chunked upload. Returns the completed FileItem. */
+export async function completeUpload(fileId: string): Promise<FileItem> {
+  const { data } = await client.post<FileItem>('/files/upload/complete', { fileId });
+  return data;
+}
+
+/** Abort an in-progress chunked upload and delete all partial data. */
+export async function abortUpload(fileId: string): Promise<void> {
+  await client.post('/files/upload/abort', { fileId });
+}
+
+/**
+ * Upload a file using the chunked protocol.
+ * Slices the file into ≤ CHUNK_SIZE chunks, uploads each sequentially,
+ * then completes the upload. On error, aborts and rethrows.
+ *
+ * @param file       Browser File object
+ * @param parentId   Destination folder id, or null for root
+ * @param onProgress Called with percent complete (0-100) as bytes are sent
+ */
+export async function uploadFileChunked(
+  file: File,
+  parentId: string | null,
+  onProgress?: (percent: number) => void,
+): Promise<FileItem> {
+  const fileId = await initUpload({
+    name: file.name,
+    parentId,
+    mimeType: file.type || 'application/octet-stream',
+    size: file.size,
+  });
+
+  const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+  let bytesUploaded = 0;
+
+  try {
+    for (let index = 0; index < totalChunks; index++) {
+      const start = index * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const slice = file.slice(start, end);
+      const buffer = await slice.arrayBuffer();
+
+      await uploadChunk(fileId, index, buffer);
+
+      bytesUploaded += end - start;
+      onProgress?.(Math.round((bytesUploaded / file.size) * 100));
+    }
+
+    const result = await completeUpload(fileId);
+    onProgress?.(100);
+    return result;
+  } catch (err) {
+    // Best-effort abort — don't mask the original error
+    try { await abortUpload(fileId); } catch { /* ignore */ }
+    throw err;
+  }
 }
 
 /** Download a file — returns a blob URL for the browser to use. */

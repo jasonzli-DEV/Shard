@@ -217,6 +217,7 @@ describe('Blob model', () => {
       gridfsId: new mongoose.Types.ObjectId(),
       index: 0,
       size: 4096,
+      plaintextSize: 4096,
     });
     expect(blob._id).toBeDefined();
   });
@@ -224,9 +225,9 @@ describe('Blob model', () => {
   it('enforces unique (fileId, index)', async () => {
     const fileId = new mongoose.Types.ObjectId();
     const clusterId = new mongoose.Types.ObjectId();
-    await Blob.create({ fileId, clusterId, gridfsId: new mongoose.Types.ObjectId(), index: 0, size: 100 });
+    await Blob.create({ fileId, clusterId, gridfsId: new mongoose.Types.ObjectId(), index: 0, size: 100, plaintextSize: 100 });
     await expect(
-      Blob.create({ fileId, clusterId, gridfsId: new mongoose.Types.ObjectId(), index: 0, size: 100 })
+      Blob.create({ fileId, clusterId, gridfsId: new mongoose.Types.ObjectId(), index: 0, size: 100, plaintextSize: 100 })
     ).rejects.toThrow(/duplicate key/i);
   });
 });
