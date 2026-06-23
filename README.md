@@ -38,35 +38,68 @@ When `runStorageCheck` detects a cluster above the provision threshold, `provisi
 
 On first launch visit `/setup`. The setup wizard walks you through:
 
-1. **Starter cluster** — paste a MongoDB Atlas URI; the wizard pings it to confirm connectivity before proceeding.
-2. **OAuth providers** — enable Google and/or GitHub, paste Client ID + Client Secret. The wizard shows exactly where to find these in the provider console.
+1. **Starter cluster** — paste a MongoDB Atlas URI; the wizard pings it to confirm connectivity. *(Skipped automatically when `STARTER_MONGODB_URI` is already set as an env var, e.g. on Vercel.)*
+2. **OAuth providers** — enable Google and/or GitHub, paste Client ID + Client Secret. The wizard shows where to find these in the provider console.
 3. **Site config** — your public URL and CORS allowed origins.
-4. **Apply** — writes a `.env` file and updates the running process immediately. No restart required.
+4. **Apply** — saves the configuration to the **database** (not a file) and activates the app immediately. No restart required.
 
-After setup completes you are redirected to `/login`. The first user to sign in becomes admin.
+All configuration except `STARTER_MONGODB_URI` lives in the starter database, so deployments stay stateless and portable.
 
-## Quick start (development)
+The **first user** to sign in becomes **admin**. Access is governed by an admin toggle in **Settings → Access**:
+
+- **Approval** (default) — new sign-ins land on an "awaiting approval" screen until an admin approves them (or pre-invites their email).
+- **Open** — anyone who signs in with Google/GitHub gets immediate access.
+
+> **OAuth redirect URI:** in your Google/GitHub OAuth app, set the callback to
+> `https://<your-domain>/api/auth/google/callback` and `https://<your-domain>/api/auth/github/callback`.
+
+## Installation
+
+You need one free **MongoDB Atlas M0 cluster** to act as the *starter* (metadata) store. Create it, add a database user, and set Network Access to allow your host (`0.0.0.0/0` for a serverless/remote deploy). Its connection string is your `STARTER_MONGODB_URI`. Everything else is entered through the in-app setup wizard.
+
+### Option A — Deploy on Vercel (one click)
+
+1. Push/import this repo into Vercel (**vercel.com/new** → import the repo). `vercel.json` configures the build, the API serverless function, SPA routing, and cron.
+2. In **Project → Settings → Environment Variables**, add:
+   - `STARTER_MONGODB_URI` — your Atlas starter connection string *(required)*
+   - `CRON_SECRET` — any random string, used to authorize the maintenance cron *(recommended)*
+   - `COOKIE_SECURE` = `true` *(Vercel serves HTTPS)*
+3. Deploy. Open the deployment URL → the wizard skips the starter step (it's the env var) and asks only for OAuth + site config.
+4. Set your OAuth app callback to `https://<your-vercel-domain>/api/auth/<provider>/callback`.
+
+Or via CLI:
 
 ```bash
-git clone https://github.com/zhixiangli/Shard
-cd Shard
-cp .env.example .env
-# Fill in STARTER_MONGODB_URI and at least one OAuth provider,
-# or leave blank and complete the setup wizard at /setup
-
-npm install
-npm run dev        # backend :4000 + frontend :5173 concurrently
+vercel link
+vercel env add STARTER_MONGODB_URI production
+vercel --prod
 ```
 
-## Production (Docker Compose)
+> **Note:** cluster auto-provisioning runs inline during uploads (Atlas M0 comes up in seconds). The cron jobs only do periodic cleanup/stats; the Vercel **Hobby** plan limits cron to once daily (upgrade to Pro for more frequent maintenance).
+
+### Option B — Docker (self-hosted: Pi, VPS, homelab)
 
 ```bash
+git clone https://github.com/jasonzli-DEV/Shard
+cd Shard
 cp .env.example .env
-# Optionally pre-fill values; otherwise complete the setup wizard
+# Set STARTER_MONGODB_URI (+ optional JWT_SECRET, COOKIE_SECURE). Everything
+# else is configured through the setup wizard.
 
 docker compose up -d
-# Backend  → :4000
-# Frontend → :80  (nginx serves built assets, proxies /api to backend)
+# Backend  → :4000        Frontend → :80 (nginx serves the build, proxies /api)
+```
+
+Open `http://<host>` and complete the wizard. To enable HTTPS, put a reverse proxy in front and set `COOKIE_SECURE=true`.
+
+### Option C — Local development
+
+```bash
+git clone https://github.com/jasonzli-DEV/Shard
+cd Shard
+cp .env.example .env          # set STARTER_MONGODB_URI (or leave blank for setup mode)
+npm install
+npm run dev                   # backend :4000 + frontend :5173 concurrently
 ```
 
 ## Testing
@@ -78,20 +111,18 @@ cd frontend && npm test      # Vitest + @testing-library/react
 
 ## Environment variables
 
+Only `STARTER_MONGODB_URI` is required as an env var. Everything else is set through the setup wizard and stored in the database (env values, where present, act as fallbacks/overrides).
+
 | Variable | Required | Description |
 |---|---|---|
-| `STARTER_MONGODB_URI` | Yes | Atlas URI for the metadata cluster |
-| `JWT_SECRET` | Auto | 32-byte random hex; auto-generated by setup wizard if absent |
-| `PUBLIC_URL` | Yes | Base URL for OAuth callbacks and shared links |
-| `FRONTEND_URL` | Yes | Primary CORS origin (often same as PUBLIC_URL) |
-| `ALLOWED_ORIGINS` | Yes | Comma-separated CORS origins |
-| `GOOGLE_CLIENT_ID` | OAuth | Google OAuth 2.0 client ID |
-| `GOOGLE_CLIENT_SECRET` | OAuth | Google OAuth 2.0 client secret |
-| `GITHUB_CLIENT_ID` | OAuth | GitHub OAuth app client ID |
-| `GITHUB_CLIENT_SECRET` | OAuth | GitHub OAuth app client secret |
-| `PORT` | No | Backend port (default 4000) |
+| `STARTER_MONGODB_URI` | **Yes** | Atlas URI for the starter (metadata) cluster — the one bootstrap value |
+| `CRON_SECRET` | Recommended | Authorizes `/api/cron/*` maintenance endpoints (Vercel Cron) |
+| `COOKIE_SECURE` | No | `true` when served over HTTPS (set this on Vercel / behind TLS); default `false` |
+| `JWT_SECRET` | No | Auto-generated and stored in the DB if absent |
+| `PORT` | No | Backend port (default 4000; ignored on serverless) |
+| `SERVERLESS` | No | Set to `1` on Vercel (via `vercel.json`) to disable in-process background loops |
 
-At least one OAuth provider pair is required.
+Configured **through the wizard → stored in the DB:** OAuth client IDs/secrets (Google and/or GitHub — at least one), public URL, allowed origins, and the access mode. They can also be supplied as env vars (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `PUBLIC_URL`, `ALLOWED_ORIGINS`) as a fallback.
 
 ## Structure
 

@@ -15,7 +15,7 @@ import adminRouter from './routes/admin';
 import cronRouter from './routes/cron';
 import { requireAuth } from './middleware/auth';
 import { e2eAuthRouter } from './routes/e2eAuth';
-import { getConfig } from './config/configService';
+import { getConfig, isConfigured } from './config/configService';
 import { logger } from './utils/logger';
 
 // Process-level error guards — log but never crash the server
@@ -30,20 +30,33 @@ export function createApp(): Application {
   const app = express();
 
   // ── Middleware ────────────────────────────────────────────────────────────
-  const cfg = getConfig();
-  const allowedOrigins = (cfg.allowedOrigins ?? process.env.ALLOWED_ORIGINS ?? process.env.FRONTEND_URL ?? 'http://localhost:5173')
-    .split(',')
-    .map((o) => o.trim());
-
+  // CORS is evaluated LIVE per request (not snapshotted) because on serverless
+  // the app instance is cached across config changes. During setup (before the
+  // instance is configured) all origins are allowed so the wizard — served from
+  // the deployment's own domain — can reach /api/setup/*. A disallowed origin is
+  // denied gracefully (no thrown error → no 500); the browser blocks it.
   app.use(
     cors({
       origin: (origin, cb) => {
-        // Allow requests with no origin (server-to-server, curl, Postman)
-        if (!origin || allowedOrigins.includes(origin)) {
-          cb(null, true);
-        } else {
-          cb(new Error(`CORS: origin "${origin}" not allowed`));
-        }
+        // No Origin header (server-to-server, curl, same-origin) → allow.
+        if (!origin) return cb(null, true);
+
+        const cfg = getConfig();
+        const list = [
+          ...(cfg.allowedOrigins ?? process.env.ALLOWED_ORIGINS ?? '')
+            .split(',')
+            .map((o) => o.trim())
+            .filter(Boolean),
+          ...(cfg.publicUrl ? [cfg.publicUrl.trim()] : []),
+          ...(process.env.PUBLIC_URL ? [process.env.PUBLIC_URL.trim()] : []),
+          ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL.trim()] : []),
+        ];
+
+        // Before setup is complete, allow any origin so the wizard works.
+        if (!isConfigured() || list.includes(origin)) return cb(null, true);
+
+        // Disallowed origin: deny without throwing (avoids a 500).
+        return cb(null, false);
       },
       credentials: true,
     })
