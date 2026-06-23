@@ -5,7 +5,23 @@ import { createSession } from '../auth/sessions';
 import { requireAuth } from '../middleware/auth';
 import { UserModel } from '../models/User';
 import { getStarter } from '../lib/db';
+import { getConfig } from '../config/configService';
 import { logger } from '../utils/logger';
+
+/**
+ * Where to send the browser after OAuth. The public URL is set during setup and
+ * stored in the DB (config.publicUrl); env vars are fallbacks. The localhost
+ * default only applies to local dev where nothing is configured.
+ */
+function resolveFrontendUrl(): string {
+  const cfg = getConfig();
+  return (
+    cfg.publicUrl ??
+    process.env.FRONTEND_URL ??
+    process.env.PUBLIC_URL ??
+    'http://localhost:5173'
+  );
+}
 
 const router = Router();
 
@@ -110,14 +126,14 @@ router.get(
     passport.authenticate(provider, { session: false }, async (err: Error | null, user: any) => {
       if (err || !user) {
         logger.error('OAuth callback error', { provider, error: err?.message });
-        const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+        const frontendUrl = resolveFrontendUrl();
         res.redirect(`${frontendUrl}/login?error=oauth_failed`);
         return;
       }
 
       try {
         const token = await createSession(user._id.toString());
-        const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+        const frontendUrl = resolveFrontendUrl();
 
         res.cookie(COOKIE_NAME, token, {
           httpOnly: true,
@@ -129,7 +145,7 @@ router.get(
         res.redirect(frontendUrl);
       } catch (sessionErr) {
         logger.error('Session creation failed after OAuth', { error: (sessionErr as Error).message });
-        const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+        const frontendUrl = resolveFrontendUrl();
         res.redirect(`${frontendUrl}/login?error=session_failed`);
       }
     })(req, res, next);
